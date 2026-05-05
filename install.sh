@@ -81,6 +81,15 @@ launch_wizard() {
     local gui_display="${DISPLAY:-}"
     local gui_wayland="${WAYLAND_DISPLAY:-}"
 
+    # Auto-détection du vrai user quand on tourne en root (curl | sudo bash).
+    # Sans ça, dictee-setup serait lancé en root → ~/.config/dictee.conf
+    # résolu en /root/.config/dictee.conf qui n'existe pas → wizard_mode=True
+    # à tort + écriture polluante dans /root au Apply.
+    if [[ -z "$target_user" && "$(id -u)" -eq 0 ]]; then
+        target_user="${SUDO_USER:-}"
+        [[ -z "$target_user" ]] && return 0
+    fi
+
     # In tarball/root mode, inspect the real user's environment instead of root's.
     if [[ -n "$target_user" && "$target_user" != "$(id -un)" ]]; then
         local uid; uid=$(id -u "$target_user" 2>/dev/null) || return 0
