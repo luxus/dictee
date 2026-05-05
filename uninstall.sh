@@ -2,19 +2,22 @@
 # uninstall.sh — dictee uninstaller (universal)
 #
 # Auto-detects how dictee was installed (deb/rpm/pacman/tarball) and removes
-# each layer. User data (configs, models) is preserved unless --purge.
+# each layer. In interactive mode, prompts before deleting personal configs
+# and ONNX models. --purge skips prompts and deletes everything.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/uninstall.sh | bash
-#   sudo ./uninstall.sh               # local invocation
-#   sudo ./uninstall.sh --purge       # also remove configs + models
-#   sudo ./uninstall.sh --keep-models # skip the model prompt
+#   sudo ./uninstall.sh                # local invocation (interactive prompts)
+#   sudo ./uninstall.sh --purge        # delete configs + models without prompting
+#   sudo ./uninstall.sh --keep-configs # skip the config prompt (keep)
+#   sudo ./uninstall.sh --keep-models  # skip the model prompt (keep)
 
 set -euo pipefail
 
 PURGE=0
 NON_INTERACTIVE=0
 KEEP_MODELS=0
+KEEP_CONFIGS=0
 
 # ---- Colors ----
 if [[ -t 1 ]]; then
@@ -38,19 +41,21 @@ Usage:
   sudo ./uninstall.sh [-- options]
 
 Options:
-  --purge             Also remove user configs (~/.config/dictee) and models
+  --purge             Delete configs and models without prompting
+  --keep-configs      Do not prompt about personal configs (keep them)
   --keep-models       Do not prompt about models (keep them)
   --non-interactive   No prompts; keep user data (same as declining all prompts)
   --help, -h          Show this help
 
 Detects .deb / .rpm / pacman / tarball installs and removes each layer.
-User data is preserved unless --purge.
+In interactive mode, asks before deleting personal configs and models.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --purge)           PURGE=1; shift ;;
+        --keep-configs)    KEEP_CONFIGS=1; shift ;;
         --keep-models)     KEEP_MODELS=1; shift ;;
         --non-interactive) NON_INTERACTIVE=1; shift ;;
         --help|-h)         usage; exit 0 ;;
@@ -252,13 +257,34 @@ if command -v kpackagetool6 >/dev/null 2>&1; then
     fi
 fi
 
-# ---- Purge user data ----
-if [[ $PURGE -eq 1 ]]; then
-    info "Purging user data..."
-    rm -rf "$REAL_HOME/.config/dictee" 2>/dev/null || true
-    rm -rf "$REAL_HOME/.cache/dictee" 2>/dev/null || true
-    rm -rf "$REAL_HOME/.local/share/dictee" 2>/dev/null || true
-    ok "User configs removed"
+# ---- User configs prompt ----
+# dictee stores config in TWO places: ~/.config/dictee.conf (file, main
+# settings sourced by the dictee shell) and ~/.config/dictee/ (directory,
+# postprocess rules + dictionary + LLM prompts + continuation, etc.). Both
+# must be removed together — leaving dictee.conf behind makes the next
+# install skip the first-run wizard.
+CONFIG_PRESENT=0
+[[ -f "$REAL_HOME/.config/dictee.conf"     ]] && CONFIG_PRESENT=1
+[[ -d "$REAL_HOME/.config/dictee"          ]] && CONFIG_PRESENT=1
+[[ -d "$REAL_HOME/.cache/dictee"           ]] && CONFIG_PRESENT=1
+[[ -d "$REAL_HOME/.local/share/dictee"     ]] && CONFIG_PRESENT=1
+
+if [[ $CONFIG_PRESENT -eq 1 ]] && [[ $KEEP_CONFIGS -eq 0 ]]; then
+    if [[ $PURGE -eq 1 ]]; then
+        REPLY="y"
+    else
+        echo
+        ask_yes_no "Also delete personal config files (~/.config/dictee.conf and ~/.config/dictee/)?" "n"
+    fi
+    if [[ "$REPLY" == "y" ]]; then
+        rm -f  "$REAL_HOME/.config/dictee.conf"     2>/dev/null || true
+        rm -rf "$REAL_HOME/.config/dictee"          2>/dev/null || true
+        rm -rf "$REAL_HOME/.cache/dictee"           2>/dev/null || true
+        rm -rf "$REAL_HOME/.local/share/dictee"     2>/dev/null || true
+        ok "User configs removed"
+    else
+        info "User configs kept (~/.config/dictee.conf and ~/.config/dictee/)"
+    fi
 fi
 
 # ---- Models prompt ----
