@@ -37,6 +37,29 @@ need() { command -v "$1" >/dev/null 2>&1 || die "Missing required tool: $1"; }
 
 # Offer to launch dictee-setup when a graphical session is available.
 # Usage: launch_wizard [user]  (user = optional; defaults to current user)
+auto_reset_services() {
+    # Si dictee.conf existe (réinstall avec config préservée), lance
+    # dictee-reset pour que dictee-ptt relise la conf. Le %post du paquet
+    # le fait déjà mais peut échouer silencieusement (timing/env/groupes
+    # pas encore propagés au systemd user). dictee-reset depuis la session
+    # user complète est plus fiable.
+    local target_user="${1:-}"
+    local conf_path uid
+    if [[ -n "$target_user" && "$target_user" != "$(id -un)" ]]; then
+        conf_path="$(eval echo "~$target_user")/.config/dictee.conf"
+        [[ -f "$conf_path" ]] || return 0
+        uid=$(id -u "$target_user" 2>/dev/null) || return 0
+        info "Configuration existante détectée — réinitialisation des services..."
+        sudo -u "$target_user" XDG_RUNTIME_DIR="/run/user/${uid}" \
+            dictee-reset >/dev/null 2>&1 || true
+    else
+        conf_path="$HOME/.config/dictee.conf"
+        [[ -f "$conf_path" ]] || return 0
+        info "Configuration existante détectée — réinitialisation des services..."
+        dictee-reset >/dev/null 2>&1 || true
+    fi
+}
+
 launch_wizard() {
     local target_user="${1:-}"
     local sudo_env=""
@@ -394,6 +417,7 @@ mode_online() {
     echo
     echo "Documentation: https://github.com/${REPO}"
 
+    auto_reset_services
     launch_wizard
 }
 
@@ -674,6 +698,7 @@ mode_tarball() {
     echo
     echo "Uninstall: sudo ./uninstall.sh"
 
+    auto_reset_services "${SUDO_USER:-}"
     launch_wizard "${SUDO_USER:-}"
 }
 
