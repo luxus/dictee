@@ -87,12 +87,15 @@ KEY_LEFTCTRL = 29
 KEY_RIGHTCTRL = 97
 KEY_LEFTSHIFT = 42
 KEY_RIGHTSHIFT = 54
+KEY_LEFTMETA = 125   # Super / Windows key (gauche)
+KEY_RIGHTMETA = 126  # Super / Windows key (droite)
 
 # Modificateurs supportés : nom → (keycode gauche, keycode droit)
 MODIFIERS = {
     "alt": (KEY_LEFTALT, KEY_RIGHTALT),
     "ctrl": (KEY_LEFTCTRL, KEY_RIGHTCTRL),
     "shift": (KEY_LEFTSHIFT, KEY_RIGHTSHIFT),
+    "super": (KEY_LEFTMETA, KEY_RIGHTMETA),
 }
 
 DEBOUNCE = 0.15       # 150ms anti-rebond
@@ -225,16 +228,22 @@ def sync_state():
 # ─── Logique PTT commune ───────────────────────────────────────────
 
 class PttState:
-    def __init__(self, mode, key_dictee, key_translate, mod_translate=""):
+    def __init__(self, mode, key_dictee, key_translate, mod_translate="",
+                 mod_cheatsheet=""):
         self.mode = mode
         self.key_dictee = key_dictee
         self.key_translate = key_translate
         # Modificateur pour traduction (ex: "alt" → Alt+F9)
         self.mod_translate = mod_translate
+        # Modificateur pour cheatsheet (ex: "shift" → Shift+F9 toggle l'aide)
+        # Une touche PTT seule = dictée. Combinée avec mod_cheatsheet =
+        # dictee-cheatsheet --toggle (one-shot, pas de hold/release).
+        self.mod_cheatsheet = mod_cheatsheet
         self.recording = False
         self.recording_translate = False
         self.last_down_time = 0
         self.last_stop_time = 0
+        self.last_cheatsheet_time = 0
         self.keys_held = set()
 
     def _mod_held(self, mod_name):
@@ -292,6 +301,18 @@ class PttState:
             if self.recording and code == self.key_translate:
                 return True
 
+        # Cheatsheet shortcut (Mod+keyPtt → toggle l'aide). One-shot : déclenché
+        # uniquement au KEY_DOWN, ignoré au KEY_UP. Vérifié AVANT translate +
+        # dictation pour qu'il prenne le pas même si même touche que dictée.
+        if (code == self.key_dictee
+                and value == KEY_DOWN
+                and self.mod_cheatsheet
+                and self._mod_held(self.mod_cheatsheet)
+                and not self.recording
+                and not self.recording_translate):
+            self._handle_cheatsheet(now)
+            return True  # consommer (ne pas laisser fuir vers les apps)
+
         # Déterminer si c'est dictée ou traduction
         if code == self.key_dictee:
             if self.key_translate and self.key_translate == self.key_dictee:
@@ -338,6 +359,28 @@ class PttState:
         if now - self.last_stop_time < STOP_COOLDOWN:
             return False
         return True
+
+    def _handle_cheatsheet(self, now):
+        """Toggle the floating cheatsheet card (one-shot, no hold/release).
+
+        Anti-rebond local : le combo Mod+key peut générer plusieurs KEY_DOWN
+        rapprochés sur certains claviers ; on debounce sur DEBOUNCE.
+        """
+        if now - self.last_cheatsheet_time < DEBOUNCE:
+            return
+        self.last_cheatsheet_time = now
+        print(f"[ptt] cheatsheet toggle (Mod+key={self.mod_cheatsheet}+key)")
+        try:
+            subprocess.Popen(
+                ["dictee-cheatsheet", "--toggle"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except FileNotFoundError:
+            print("[ptt] WARNING: dictee-cheatsheet binary not found — skipping",
+                  file=sys.stderr)
 
     def _handle_dictee(self, value, now):
         if self.mode == "hold":
@@ -734,7 +777,8 @@ def main():
     mode = "toggle"
     key_dictee = 67   # F9
     key_translate = 0  # désactivé par défaut
-    mod_translate = ""  # modificateur traduction (alt, ctrl, shift)
+    mod_translate = ""    # modificateur traduction (alt, ctrl, shift)
+    mod_cheatsheet = ""   # modificateur cheatsheet toggle (alt, ctrl, shift, super)
     conf = load_config()
 
     mode = conf.get("DICTEE_PTT_MODE", mode)
@@ -758,6 +802,31 @@ def main():
         if _parsed is not None:
             key_translate = _parsed
     mod_translate = conf.get("DICTEE_PTT_MOD_TRANSLATE", mod_translate)
+    mod_cheatsheet = conf.get("DICTEE_CHEATSHEET_MOD", mod_cheatsheet)
+
+    def _normalize_cheatsheet_mod(raw):
+        """dictee-setup sauvegarde le combo data tel quel ('same_alt',
+        'same_super', 'separate', 'disabled', ...). dictee-ptt veut juste
+        un nom de modificateur ('alt', 'super', ...) ou vide.
+
+        - 'same_X'    → 'X' (gérer ici)
+        - 'separate'  → '' (raccourci kglobalaccel séparé, pas notre rôle)
+        - 'disabled'  → '' (pas de raccourci cheatsheet)
+        - autre       → tel quel (compat avec valeurs déjà nettoyées)
+        """
+        if not raw:
+            return ""
+        if raw.startswith("same_"):
+            raw = raw[5:]
+        if raw in ("separate", "disabled"):
+            return ""
+        if raw not in MODIFIERS:
+            print(f"[ptt] WARNING: DICTEE_CHEATSHEET_MOD={raw!r} unknown, ignoré",
+                  file=sys.stderr)
+            return ""
+        return raw
+
+    mod_cheatsheet = _normalize_cheatsheet_mod(mod_cheatsheet)
 
     for arg in sys.argv[1:]:
         if arg.startswith("--mode="):
@@ -772,6 +841,8 @@ def main():
                 key_translate = _parsed
         elif arg.startswith("--mod-translate="):
             mod_translate = arg.split("=", 1)[1]
+        elif arg.startswith("--mod-cheatsheet="):
+            mod_cheatsheet = arg.split("=", 1)[1]
         elif arg == "--help":
             print(__doc__)
             sys.exit(0)
@@ -780,10 +851,11 @@ def main():
     DICTEE_BIN = find_dictee_bin()
 
     mod_info = f" mod_translate={mod_translate}" if mod_translate else ""
-    print(f"[ptt] mode={mode} key={key_dictee} key_translate={key_translate}{mod_info}")
+    cheat_info = f" mod_cheatsheet={mod_cheatsheet}" if mod_cheatsheet else ""
+    print(f"[ptt] mode={mode} key={key_dictee} key_translate={key_translate}{mod_info}{cheat_info}")
     print(f"[ptt] dictee={DICTEE_BIN}")
 
-    ptt = PttState(mode, key_dictee, key_translate, mod_translate)
+    ptt = PttState(mode, key_dictee, key_translate, mod_translate, mod_cheatsheet)
 
     if HAS_EVDEV:
         print("[ptt] backend: evdev (grab + uinput)")
