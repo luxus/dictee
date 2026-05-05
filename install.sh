@@ -43,7 +43,17 @@ auto_reset_services() {
     # le fait déjà mais peut échouer silencieusement (timing/env/groupes
     # pas encore propagés au systemd user). dictee-reset depuis la session
     # user complète est plus fiable.
+    #
+    # systemctl --user nécessite un user bus → JAMAIS de dictee-reset en
+    # tant que root. Si on tourne en root (curl | sudo bash), on bascule
+    # via sudo -u $SUDO_USER. Si pas de SUDO_USER → on skip (root pur,
+    # pas de session user à réinitialiser).
     local target_user="${1:-}"
+    if [[ -z "$target_user" && "$(id -u)" -eq 0 ]]; then
+        target_user="${SUDO_USER:-}"
+        [[ -z "$target_user" ]] && return 0
+    fi
+
     local conf_path uid
     if [[ -n "$target_user" && "$target_user" != "$(id -un)" ]]; then
         conf_path="$(eval echo "~$target_user")/.config/dictee.conf"
