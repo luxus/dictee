@@ -7270,11 +7270,15 @@ class DicteeSetupDialog(QDialog):
             row_input.addStretch()
             lay_sc.addLayout(row_input)
 
-        # Voice commands cheatsheet — KDE global shortcut.
-        # Same UX as the translation shortcut: combo "Same key + modifier"
-        # reuses the dictation PTT key (e.g. F9) with the chosen modifier;
-        # "Separate key" lets the user pick any QKeySequence; "Disabled"
-        # turns it off. Default: Same key + Ctrl + Alt.
+        # Voice commands cheatsheet — handled directly by dictee-ptt.
+        # The "Same key + Mod" modes route Mod+PTT to dictee-cheatsheet
+        # --toggle through dictee-ptt (same path as Alt+key for translate),
+        # which works on KDE and GNOME alike (no kglobalaccel dependency).
+        # "Separate key" still uses kglobalaccel for users who want a
+        # totally distinct key; "Disabled" turns the shortcut off.
+        # Default: Disabled (the user opts in explicitly — Ctrl+Alt+Fn
+        # used to be the default but collisions with TTY switching made
+        # it unsafe; Super+key replaces it as the safe "modifier" option).
         lay_sc.addSpacing(8)
         lbl_cheat = QLabel(_("Voice commands cheatsheet") + " :")
         lay_sc.addWidget(lbl_cheat)
@@ -7282,23 +7286,27 @@ class DicteeSetupDialog(QDialog):
         self.cmb_cheatsheet_mode = QComboBox()
         self.cmb_cheatsheet_mode.addItem(_("Same key + Alt"), "same_alt")
         self.cmb_cheatsheet_mode.addItem(_("Same key + Ctrl"), "same_ctrl")
-        self.cmb_cheatsheet_mode.addItem(_("Same key + Ctrl + Alt"), "same_ctrl_alt")
+        self.cmb_cheatsheet_mode.addItem(_("Super + same key"), "same_super")
         self.cmb_cheatsheet_mode.addItem(_("Same key + Shift"), "same_shift")
         self.cmb_cheatsheet_mode.addItem(_("Separate key"), "separate")
         self.cmb_cheatsheet_mode.addItem(_("Disabled"), "disabled")
 
         existing_cheat_mode = self.conf.get("DICTEE_CHEATSHEET_MOD", "")
         existing_cheat_seq = self.conf.get("DICTEE_CHEATSHEET_KEY_SEQ", "")
+        # Migration: legacy "same_ctrl_alt" was unsafe (Ctrl+Alt+Fn switches
+        # TTYs on Linux). Map silently to the new "same_super" so existing
+        # users keep a working modifier shortcut on their next setup save.
         mode_to_idx = {
             "same_alt": 0, "alt": 0,
             "same_ctrl": 1, "ctrl": 1,
-            "same_ctrl_alt": 2, "ctrl_alt": 2,
+            "same_super": 2, "super": 2,
+            "same_ctrl_alt": 2, "ctrl_alt": 2,  # legacy → migrated to super
             "same_shift": 3, "shift": 3,
             "separate": 4,
             "disabled": 5,
         }
         self.cmb_cheatsheet_mode.setCurrentIndex(
-            mode_to_idx.get(existing_cheat_mode, 2))  # default Same key + Ctrl+Alt
+            mode_to_idx.get(existing_cheat_mode, 5))  # default Disabled
         lay_sc.addWidget(self.cmb_cheatsheet_mode)
 
         # Capture editor visible only when "Separate key" is selected.
@@ -14341,12 +14349,12 @@ class DicteeSetupDialog(QDialog):
         labels_cheat = {
             "same_alt": (f"Alt+{name}", _("Same key + Alt")),
             "same_ctrl": (f"Ctrl+{name}", _("Same key + Ctrl")),
-            "same_ctrl_alt": (f"Ctrl+Alt+{name}", _("Same key + Ctrl + Alt")),
+            "same_super": (f"Super+{name}", _("Super + same key")),
             "same_shift": (f"Shift+{name}", _("Same key + Shift")),
             "separate": (_("Separate key"), _("Separate key")),
             "disabled": (_("Disabled"), _("Disabled")),
         }
-        # Translate combo has the same data values minus "same_ctrl_alt".
+        # Translate combo has the same data values minus "same_super".
         for combo_name in ("cmb_cheatsheet_mode", "cmb_translate_mode"):
             combo = getattr(self, combo_name, None)
             if combo is None:
@@ -14375,7 +14383,7 @@ class DicteeSetupDialog(QDialog):
         mod_map = {
             "same_alt": "Alt",
             "same_ctrl": "Ctrl",
-            "same_ctrl_alt": "Ctrl+Alt",
+            "same_super": "Meta",  # Qt's "Meta" = the Super/Windows key
             "same_shift": "Shift",
         }
         mod = mod_map.get(mode)
@@ -16562,7 +16570,8 @@ class DicteeSetupDialog(QDialog):
                         _pv = _pv.strip().strip('"').strip("'")
                         if _pk in ("DICTEE_PTT_MODE", "DICTEE_PTT_KEY",
                                    "DICTEE_PTT_KEY_TRANSLATE",
-                                   "DICTEE_PTT_MOD_TRANSLATE"):
+                                   "DICTEE_PTT_MOD_TRANSLATE",
+                                   "DICTEE_CHEATSHEET_MOD"):
                             _old_ptt[_pk] = _pv
                         elif _pk in _ASR_KEYS:
                             _old_asr[_pk] = _pv
@@ -16768,11 +16777,17 @@ class DicteeSetupDialog(QDialog):
                         self.cmb_trpp_short_text_max.currentData()
                         if hasattr(self, 'cmb_trpp_short_text_max') else 3) or 3)
 
-        # Register the cheatsheet KDE global shortcut. The QKeySequence is
-        # resolved from the combo: "Same key + <mod>" combines with the
-        # dictation PTT key, "Separate key" uses the captured sequence,
-        # "Disabled" registers nothing.
-        if cheatsheet_seq_obj is not None and cheatsheet_seq_obj.count() > 0:
+        # Register the cheatsheet shortcut.
+        # - "Same key + <mod>" modes (same_alt / same_ctrl / same_super /
+        #   same_shift) → handled directly by dictee-ptt (Mod+key combo
+        #   triggers `dictee-cheatsheet --toggle`). NO kglobalaccel call
+        #   needed — works on KDE and GNOME alike.
+        # - "Separate key" → uses kglobalaccel (KDE only) for now. GNOME
+        #   support via `apply_gnome_shortcut` is a v1.4 chantier.
+        # - "Disabled" → nothing to register.
+        if (cheatsheet_mode == "separate"
+                and cheatsheet_seq_obj is not None
+                and cheatsheet_seq_obj.count() > 0):
             try:
                 kde_format = qt_key_to_kde(cheatsheet_seq_obj)
                 if kde_format:
@@ -16785,6 +16800,14 @@ class DicteeSetupDialog(QDialog):
                     )
             except Exception as _e:
                 _dbg_setup(f"_on_apply: cheatsheet shortcut registration failed: {_e}")
+        elif cheatsheet_mode and cheatsheet_mode.startswith("same_"):
+            # Clean up any stale kglobalaccel registration from a previous
+            # "Separate key" choice, so the user doesn't get a phantom KDE
+            # shortcut firing alongside the dictee-ptt one.
+            try:
+                remove_kde_shortcut("dictee-cheatsheet-toggle.desktop")
+            except Exception as _e:
+                _dbg_setup(f"_on_apply: failed to clean up legacy cheatsheet shortcut: {_e}")
 
         # Calibration playground: wipe temp recordings now that the
         # threshold value has been validated and persisted.
@@ -16834,12 +16857,17 @@ class DicteeSetupDialog(QDialog):
             "DICTEE_PTT_KEY": str(ptt_key),
             "DICTEE_PTT_KEY_TRANSLATE": str(ptt_key_translate) if ptt_key_translate else "",
             "DICTEE_PTT_MOD_TRANSLATE": ptt_mod_translate or "",
+            # dictee-ptt now also handles the cheatsheet shortcut (Mod+key →
+            # toggle dictee-cheatsheet). Changing DICTEE_CHEATSHEET_MOD must
+            # therefore restart the daemon so it picks up the new modifier.
+            "DICTEE_CHEATSHEET_MOD": cheatsheet_mode or "",
         }
         _old_ptt_normalized = {
             "DICTEE_PTT_MODE": _old_ptt.get("DICTEE_PTT_MODE", "toggle"),
             "DICTEE_PTT_KEY": _old_ptt.get("DICTEE_PTT_KEY", "67"),
             "DICTEE_PTT_KEY_TRANSLATE": _old_ptt.get("DICTEE_PTT_KEY_TRANSLATE", ""),
             "DICTEE_PTT_MOD_TRANSLATE": _old_ptt.get("DICTEE_PTT_MOD_TRANSLATE", ""),
+            "DICTEE_CHEATSHEET_MOD": _old_ptt.get("DICTEE_CHEATSHEET_MOD", ""),
         }
         _ptt_changed = _new_ptt != _old_ptt_normalized
         if _ptt_changed:

@@ -3,7 +3,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-VERSION="1.3.1"
+VERSION="1.3.2"
 PKG_DIR="pkg/dictee"
 RPMBUILD_DIR="$HOME/rpmbuild"
 
@@ -284,7 +284,7 @@ Requires:       sox
 Recommends:     python3-qt6-PyQt6-Multimedia
 Recommends:     python3-qt6-PyQt6-sip
 Recommends:     nvidia-gpu-firmware
-Recommends:     python3-evdev
+Requires:       python3-evdev
 Recommends:     wl-clipboard
 Recommends:     xclip
 Recommends:     curl
@@ -418,7 +418,20 @@ fi
 
 # CUDA venv — pip-install nvidia-*-cu12 wheels + symlink into /usr/lib/dictee/.
 # Only triggers if the provider .so is present (i.e. dictee-cuda, not cpu).
-if [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \\
+# Skip the ~1.5 GB download if no NVIDIA GPU is detected — the runtime
+# fallback (v1.3.1) picks CPU automatically.
+if [ ! -d /proc/driver/nvidia ] && [ ! -e /dev/nvidia0 ]; then
+    if [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ]; then
+        echo "→ Pas de GPU NVIDIA détecté — skip téléchargement des libs CUDA (≈ 1,5 Go)."
+        echo "  Le runtime bascule automatiquement en CPU (fallback v1.3.1)."
+        echo "  Pour activer CUDA après installation d'un driver NVIDIA :"
+        echo "    sudo python3 -m venv /opt/dictee/cuda-venv"
+        echo "    sudo /opt/dictee/cuda-venv/bin/pip install nvidia-cuda-runtime-cu12 \\\\"
+        echo "         nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 \\\\"
+        echo "         nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12"
+        echo "    sudo ldconfig"
+    fi
+elif [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \\
         && command -v python3 >/dev/null 2>&1; then
     CUDA_VENV="/opt/dictee/cuda-venv"
     mkdir -p /opt/dictee
@@ -526,7 +539,7 @@ Requires:       (python3-pyqt6 or python3-qt6-PyQt6)
 Requires:       sox
 Recommends:     python3-qt6-PyQt6-Multimedia
 Recommends:     python3-qt6-PyQt6-sip
-Recommends:     python3-evdev
+Requires:       python3-evdev
 Recommends:     wl-clipboard
 Recommends:     xclip
 Recommends:     curl

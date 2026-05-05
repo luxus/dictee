@@ -186,6 +186,43 @@ TITLE_BY_LANG = {
     "uk": "Голосові команди (UK)",
 }
 
+# First-run onboarding banner text per language. {shortcut} is replaced at
+# render time by the actual keyboard combo (e.g. "Ctrl+F9", "Meta+H") or
+# omitted entirely (FIRSTRUN_BANNER_NO_SHORTCUT) when the user has no
+# cheatsheet shortcut configured.
+FIRSTRUN_BANNER_TEXTS = {
+    "fr": "Bienvenue. Cette aide reste accessible via {shortcut} ou le menu tray. Glisser pour déplacer.",
+    "en": "Welcome. This card stays accessible via {shortcut} or the tray menu. Drag to move.",
+    "de": "Willkommen. Diese Hilfe bleibt über {shortcut} oder das Tray-Menü erreichbar. Zum Verschieben ziehen.",
+    "es": "Bienvenido. Esta ayuda sigue accesible mediante {shortcut} o el menú de la bandeja. Arrastrar para mover.",
+    "it": "Benvenuto. Questa guida resta accessibile tramite {shortcut} o il menu del vassoio. Trascina per spostare.",
+    "pt": "Bem-vindo. Esta ajuda permanece acessível via {shortcut} ou pelo menu da bandeja. Arrastar para mover.",
+    "uk": "Вітаємо. Ця довідка лишається доступною через {shortcut} або меню в треї. Перетягніть, щоб перемістити.",
+}
+FIRSTRUN_BANNER_NO_SHORTCUT = {
+    "fr": "Bienvenue. Cette aide reste accessible via le menu tray. Glisser pour déplacer.",
+    "en": "Welcome. This card stays accessible via the tray menu. Drag to move.",
+    "de": "Willkommen. Diese Hilfe bleibt über das Tray-Menü erreichbar. Zum Verschieben ziehen.",
+    "es": "Bienvenido. Esta ayuda sigue accesible mediante el menú de la bandeja. Arrastrar para mover.",
+    "it": "Benvenuto. Questa guida resta accessibile tramite il menu del vassoio. Trascina per spostare.",
+    "pt": "Bem-vindo. Esta ajuda permanece acessível pelo menu da bandeja. Arrastar para mover.",
+    "uk": "Вітаємо. Ця довідка лишається доступною через меню в треї. Перетягніть, щоб перемістити.",
+}
+
+# Display name per Linux input keycode for keys we expect to see as PTT
+# (function row + a few extras). Used by _format_cheatsheet_shortcut() to
+# build a readable "Mod+Key" string for the first-run banner.
+LINUX_KEYCODE_NAMES = {
+    1: "Esc",
+    15: "Tab",
+    28: "Enter",
+    57: "Space",
+    59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5", 64: "F6",
+    65: "F7", 66: "F8", 67: "F9", 68: "F10", 87: "F11", 88: "F12",
+    100: "RightAlt",
+    119: "Pause",
+}
+
 # Curated voice commands per language × category.
 # Templates: {cont} = continuation keyword, {suffix} = SUFFIX_<LANG>.
 # One canonical form per command — variants live in the wiki.
@@ -485,6 +522,46 @@ def _detect_lang():
     except (ValueError, TypeError):
         pass
     return "en"
+
+
+def _format_cheatsheet_shortcut():
+    """Return the user-facing cheatsheet shortcut string, or None if
+    disabled/unset.
+
+    Reads dictee.conf for DICTEE_CHEATSHEET_MOD and DICTEE_PTT_KEY (or
+    DICTEE_CHEATSHEET_KEY_SEQ for the "Separate key" mode), and rebuilds
+    a readable combo like "Ctrl+F9", "Super+F9", or "Meta+H".
+
+    - "same_X" modes  → "<X>+<key_name>" using DICTEE_PTT_KEY
+    - "separate"      → DICTEE_CHEATSHEET_KEY_SEQ verbatim
+    - "disabled"/""   → None
+    - unknown keycode → None (better no shortcut than a misleading "Ctrl+Key 67")
+    """
+    cfg = _read_kv_file(DICTEE_CONF)
+    mode = cfg.get("DICTEE_CHEATSHEET_MOD", "").strip()
+    if not mode or mode == "disabled":
+        return None
+    if mode == "separate":
+        seq = cfg.get("DICTEE_CHEATSHEET_KEY_SEQ", "").strip()
+        return seq or None
+
+    # "same_<modname>" pattern: rebuild "<Mod>+<KeyName>"
+    mod_label = {
+        "same_alt": "Alt",
+        "same_ctrl": "Ctrl",
+        "same_super": "Super",
+        "same_shift": "Shift",
+    }.get(mode)
+    if not mod_label:
+        return None
+    try:
+        ptt_key = int(cfg.get("DICTEE_PTT_KEY", "").strip())
+    except (TypeError, ValueError):
+        return None
+    key_name = LINUX_KEYCODE_NAMES.get(ptt_key)
+    if not key_name:
+        return None
+    return f"{mod_label}+{key_name}"
 
 
 def _humanize_suffix(regex_form):
@@ -1147,10 +1224,20 @@ class CheatsheetCard(QWidget):
         banner.setObjectName("CheatsheetFirstRunBanner")
         bl = QVBoxLayout(banner)
         bl.setContentsMargins(12, 10, 12, 10)
-        label = QLabel(
-            "Bienvenue. Cette aide reste accessible via Ctrl+Alt+H "
-            "ou le menu tray. Glisser pour déplacer."
-        )
+
+        # Pick the banner text in the user's source language, with the
+        # actual configured shortcut substituted in. If the user has no
+        # cheatsheet shortcut (DICTEE_CHEATSHEET_MOD=disabled or unset),
+        # we use a shorter variant that mentions only the tray menu.
+        lang = _detect_lang()
+        shortcut = _format_cheatsheet_shortcut()
+        if shortcut:
+            tmpl = FIRSTRUN_BANNER_TEXTS.get(lang) or FIRSTRUN_BANNER_TEXTS["en"]
+            text = tmpl.format(shortcut=shortcut)
+        else:
+            text = FIRSTRUN_BANNER_NO_SHORTCUT.get(lang) or FIRSTRUN_BANNER_NO_SHORTCUT["en"]
+
+        label = QLabel(text)
         label.setObjectName("CheatsheetFirstRunText")
         label.setWordWrap(True)
         bl.addWidget(label)

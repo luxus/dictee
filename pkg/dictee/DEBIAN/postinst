@@ -272,7 +272,22 @@ echo "=== Venv CUDA (libs NVIDIA en pip, portable sur toute distro) ==="
 # provider .so). Creates /opt/dictee/cuda-venv and pip installs
 # nvidia-*-cu12 wheels, then symlinks their .so files into
 # /usr/lib/dictee/ so ldconfig + ORT_DYLIB_PATH pick them up.
-if [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \
+#
+# Skip the ~1.5 GB download if no NVIDIA GPU is detected — the runtime
+# fallback (v1.3.1) will pick CPU automatically. Users who plug a GPU
+# later can re-run the pip install manually (instructions printed below).
+if [ ! -d /proc/driver/nvidia ] && [ ! -e /dev/nvidia0 ]; then
+    if [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ]; then
+        echo "→ Pas de GPU NVIDIA détecté — skip téléchargement des libs CUDA (≈ 1,5 Go)."
+        echo "  Le runtime bascule automatiquement en CPU (fallback v1.3.1)."
+        echo "  Pour activer CUDA après installation d'un driver NVIDIA :"
+        echo "    sudo python3 -m venv /opt/dictee/cuda-venv"
+        echo "    sudo /opt/dictee/cuda-venv/bin/pip install nvidia-cuda-runtime-cu12 \\"
+        echo "         nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 \\"
+        echo "         nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12"
+        echo "    sudo ldconfig"
+    fi
+elif [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \
         && command -v python3 >/dev/null 2>&1; then
     CUDA_VENV="/opt/dictee/cuda-venv"
     mkdir -p /opt/dictee

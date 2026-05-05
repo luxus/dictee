@@ -106,6 +106,38 @@ def _acquire_singleton_lock():
 
 # === Configuration ===
 
+def _spawn_detached(cmd):
+    """Lance une commande détachée du cgroup systemd du parent.
+
+    Sur GNOME / KDE Plasma 6, les apps lancées depuis le menu démarrer
+    tournent dans un scope systemd transient (app-gnome-*.scope ou
+    kde-*.scope) avec KillMode=control-group : quand le process
+    principal meurt, systemd kille tout le cgroup. Conséquence pour
+    dictee-tray : si le tray fait sys.exit() juste après avoir lancé
+    dictee-setup via subprocess.Popen(), même avec start_new_session=
+    True, le child reste dans le scope et est tué.
+
+    systemd-run --user --scope --collect crée un nouveau scope
+    indépendant pour le child → il survit à la mort du parent.
+    --collect : le scope est auto-nettoyé quand le child termine.
+    """
+    if shutil.which("systemd-run"):
+        return subprocess.Popen(
+            ["systemd-run", "--user", "--scope", "--collect", "--quiet", "--"]
+            + list(cmd),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    return subprocess.Popen(
+        list(cmd),
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 STATE_FILE = "/dev/shm/.dictee_state"
 TRANSLATE_FLAG = f"/tmp/dictee_translate-{os.getuid()}"
 APP_ID = "dictee"
@@ -1044,7 +1076,7 @@ class DicteeTrayQt:
         elif action == self.action_cheatsheet:
             subprocess.Popen(["dictee-cheatsheet", "--toggle"])
         elif action == self.action_setup:
-            subprocess.Popen(["dictee-setup"])
+            _spawn_detached(["dictee-setup"])
         elif action == self.action_reset:
             self._reset()
         elif action == self.action_quit:
@@ -1299,7 +1331,7 @@ def main():
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if result == QMessageBox.StandardButton.Yes:
-                subprocess.Popen(["dictee-setup", "--wizard"])
+                _spawn_detached(["dictee-setup", "--wizard"])
         except ImportError:
             import gi
             gi.require_version("Gtk", "3.0")
@@ -1311,7 +1343,7 @@ def main():
             )
             dialog.set_title("Dictée")
             if dialog.run() == Gtk.ResponseType.YES:
-                subprocess.Popen(["dictee-setup", "--wizard"])
+                _spawn_detached(["dictee-setup", "--wizard"])
             dialog.destroy()
         sys.exit(0)
 

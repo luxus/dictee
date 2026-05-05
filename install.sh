@@ -513,7 +513,21 @@ mode_tarball() {
     # symlinks their .so files into /usr/lib/dictee/ so ldconfig picks
     # them up. Keeps the tarball portable on any distro without
     # depending on the NVIDIA repo.
-    if [[ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ]] \
+    #
+    # Skip the ~1.5 GB download if no NVIDIA GPU is detected — the runtime
+    # fallback (v1.3.1) picks CPU automatically.
+    if [[ ! -d /proc/driver/nvidia && ! -e /dev/nvidia0 ]]; then
+        if [[ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ]]; then
+            info "No NVIDIA GPU detected — skipping CUDA libs download (~1.5 GB)."
+            info "The runtime will automatically fall back to CPU."
+            info "To enable CUDA after installing an NVIDIA driver:"
+            info "  sudo python3 -m venv /opt/dictee/cuda-venv"
+            info "  sudo /opt/dictee/cuda-venv/bin/pip install nvidia-cuda-runtime-cu12 \\"
+            info "       nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 \\"
+            info "       nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12"
+            info "  sudo ldconfig"
+        fi
+    elif [[ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ]] \
             && command -v python3 >/dev/null 2>&1; then
         local CUDA_VENV="/opt/dictee/cuda-venv"
         info "Setting up NVIDIA CUDA libs via pip into $CUDA_VENV (≈ 1.5 GB)"

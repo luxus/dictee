@@ -23,7 +23,7 @@
   <a href="https://github.com/rcspam/dictee/wiki"><img src="https://img.shields.io/badge/docs-wiki-blue" alt="Wiki"></a>
 </p>
 
-> 🎉 **v1.3.1 stable — May 2026.** Major changes since v1.2:
+> 🎉 **v1.3.2 stable — May 2026.** Major changes since v1.2:
 >
 > - **`dictee-transcribe`** — new dedicated window for offline transcription of audio/video files. Timeline player synced with text, multi-tab, per-tab translation and LLM analysis, export to PDF / SRT / JSON / Markdown.
 > - **Speaker diarization** up to 4 speakers via NVIDIA Sortformer, plus a chunked pipeline that lifts the VRAM cap on long files (54-min keynote diarized in 122 s).
@@ -31,12 +31,12 @@
 > - **Canary-1B v2** ASR backend (NVIDIA AED) with **built-in translation** on 12 native pairs — no external service needed.
 > - **Portable CUDA libs** via pip venv at postinst — no NVIDIA repo required.
 >
-> v1.3.1 patch fixes: CUDA → CPU runtime fallback, `uinput` auto-load on Fedora/RHEL, strict setup-wizard checks. → [Release](https://github.com/rcspam/dictee/releases/tag/v1.3.1) · [Changelog](https://github.com/rcspam/dictee/wiki/Changelog)
+> v1.3.2 patch fixes: clean reinstall with config preserved (auto-reset, fixed uninstall prompt), plasmoid Dictation button now correctly returns focus to the editor, cheatsheet shortcut handled by `dictee-ptt` (works on KDE **and** GNOME, no more `Ctrl+Alt+Fn` TTY collision), first-run banner i18n in 7 languages with the actual configured shortcut. → [Release](https://github.com/rcspam/dictee/releases/tag/v1.3.2) · [Changelog](https://github.com/rcspam/dictee/wiki/Changelog)
 >
 > 📚 The full [**dictee wiki**](https://github.com/rcspam/dictee/wiki) is online — 24 pages covering installation, configuration, all 4 ASR backends (with Parakeet-TDT and Canary-1B deep-dives), post-processing, diarization, troubleshooting, and developer guide. Available in 🇬🇧 English and 🇫🇷 French.
 
 <p align="center">
-  <img src="assets/demo-dictee-1.3.1.gif" alt="dictee — push-to-talk demo: press F8, speak, text appears at the cursor" width="900">
+  <img src="assets/demo-dictee-1.3.2.gif" alt="dictee — push-to-talk demo: press F8, speak, text appears at the cursor" width="900">
 </p>
 
 <p align="center">
@@ -220,7 +220,7 @@ curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | b
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --gpu
 
 # Pin a specific version
-curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.1
+curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.2
 
 # Non-interactive
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --non-interactive
@@ -233,22 +233,22 @@ Download from [Releases](../../releases).
 **Ubuntu / Debian (CPU):**
 
 ```bash
-sudo apt install ./dictee-cpu_1.3.1_amd64.deb
+sudo apt install ./dictee-cpu_1.3.2_amd64.deb
 ```
 
 **Ubuntu / Debian (GPU):** requires the NVIDIA CUDA APT repo — see [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup) for the one-time setup, then:
 
 ```bash
-sudo apt install ./dictee-cuda_1.3.1_amd64.deb
+sudo apt install ./dictee-cuda_1.3.2_amd64.deb
 ```
 
 **Fedora / openSUSE (CPU):**
 
 ```bash
-sudo dnf install ./dictee-cpu-1.3.1-1.x86_64.rpm
+sudo dnf install ./dictee-cpu-1.3.2-1.x86_64.rpm
 ```
 
-**Fedora / openSUSE (GPU):** add the CUDA repo first (see [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), then `dictee-cuda-1.3.1-1.x86_64.rpm`.
+**Fedora / openSUSE (GPU):** add the CUDA repo first (see [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), then `dictee-cuda-1.3.2-1.x86_64.rpm`.
 
 **Arch Linux (AUR):** `PKGBUILD` in the repo root (x86_64 + aarch64). Clone + `makepkg -si`.
 
@@ -257,8 +257,8 @@ sudo dnf install ./dictee-cpu-1.3.1-1.x86_64.rpm
 **Other distros (tarball):**
 
 ```bash
-tar xzf dictee-1.3.1_amd64.tar.gz
-cd dictee-1.3.1
+tar xzf dictee-1.3.2_amd64.tar.gz
+cd dictee-1.3.2
 sudo ./install.sh
 ```
 
@@ -379,7 +379,7 @@ For bug reports and workarounds, see [Troubleshooting](https://github.com/rcspam
 
 ## Roadmap
 
-**v1.3.1 (current)** — **CUDA → CPU runtime fallback**: the CUDA package now probes `/proc/driver/nvidia/gpus/` at startup and falls back to CPU automatically on hosts without a usable NVIDIA driver (virtio VMs, headless containers, machines with the driver uninstalled), instead of crashing in a restart loop. Setup wizard's "ASR service" check is now strict (active state + open socket), so the final page can no longer report "Everything is ready" while the daemon is dead. New `DICTEE_FORCE_CPU=1` env override.
+**v1.3.2 (current)** — **CUDA → CPU runtime fallback**: the CUDA package now probes `/proc/driver/nvidia/gpus/` at startup and falls back to CPU automatically on hosts without a usable NVIDIA driver (virtio VMs, headless containers, machines with the driver uninstalled), instead of crashing in a restart loop. Setup wizard's "ASR service" check is now strict (active state + open socket), so the final page can no longer report "Everything is ready" while the daemon is dead. New `DICTEE_FORCE_CPU=1` env override.
 
 **v1.3.0** — Short-text keepcaps exceptions (7 languages), extended match mode, LibreTranslate purge models, continuation + translate fixes, version-number dictation, multi-user safe (UID suffix on state files), plasmoid cross-process toggles (LLM / Short / Meeting), 682 postprocess tests + 148 pipeline tests, theme-aware banner.
 
