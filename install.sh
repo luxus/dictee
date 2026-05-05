@@ -38,16 +38,21 @@ need() { command -v "$1" >/dev/null 2>&1 || die "Missing required tool: $1"; }
 # Offer to launch dictee-setup when a graphical session is available.
 # Usage: launch_wizard [user]  (user = optional; defaults to current user)
 auto_reset_services() {
-    # Si dictee.conf existe (réinstall avec config préservée), lance
-    # dictee-reset pour que dictee-ptt relise la conf. Le %post du paquet
-    # le fait déjà mais peut échouer silencieusement (timing/env/groupes
-    # pas encore propagés au systemd user). dictee-reset depuis la session
-    # user complète est plus fiable.
+    # Si dictee.conf existe (réinstall avec config préservée), restart
+    # dictee-ptt pour qu'il relise DICTEE_PTT_KEY. Le %post du paquet le
+    # fait déjà, mais au 1er restart python3-evdev n'est pas encore
+    # déployé (transaction dnf installe les weak deps après dictee-cpu)
+    # → service coincé en mode raw où la touche fuit vers les apps. Un
+    # 2e restart ici, après que tous les paquets soient en place, force
+    # le passage en mode evdev (grab exclusif).
     #
-    # systemctl --user nécessite un user bus → JAMAIS de dictee-reset en
-    # tant que root. Si on tourne en root (curl | sudo bash), on bascule
-    # via sudo -u $SUDO_USER. Si pas de SUDO_USER → on skip (root pur,
-    # pas de session user à réinitialiser).
+    # On NE lance PAS dictee-reset complet : il restart le ASR daemon qui
+    # bloque ~20-30s pour charger le modèle ONNX → risque de timeout SSH
+    # ou de coupure de session. Le ASR daemon est déjà démarré par %post.
+    #
+    # systemctl --user nécessite un user bus → JAMAIS en tant que root.
+    # Si on tourne en root (curl | sudo bash), on bascule via sudo -u
+    # $SUDO_USER. Pas de SUDO_USER → on skip (root pur, pas de session).
     local target_user="${1:-}"
     if [[ -z "$target_user" && "$(id -u)" -eq 0 ]]; then
         target_user="${SUDO_USER:-}"
@@ -59,20 +64,13 @@ auto_reset_services() {
         conf_path="$(eval echo "~$target_user")/.config/dictee.conf"
         [[ -f "$conf_path" ]] || return 0
         uid=$(id -u "$target_user" 2>/dev/null) || return 0
-        info "Configuration existante détectée — réinitialisation des services..."
-        local _env=("XDG_RUNTIME_DIR=/run/user/${uid}")
-        sudo -u "$target_user" env "${_env[@]}" dictee-reset >/dev/null 2>&1 || true
-        # Belt-and-suspenders: restart dictee-ptt même si le dictee-reset
-        # installé est antérieur au commit 545cee8 (sans le restart PTT).
-        # Au 2e restart le venv pip est prêt → service passe en mode evdev
-        # (grab exclusif) au lieu de rester coincé en mode raw.
-        sudo -u "$target_user" env "${_env[@]}" \
+        info "Configuration existante détectée — restart de dictee-ptt..."
+        sudo -u "$target_user" XDG_RUNTIME_DIR="/run/user/${uid}" \
             systemctl --user restart dictee-ptt 2>/dev/null || true
     else
         conf_path="$HOME/.config/dictee.conf"
         [[ -f "$conf_path" ]] || return 0
-        info "Configuration existante détectée — réinitialisation des services..."
-        dictee-reset >/dev/null 2>&1 || true
+        info "Configuration existante détectée — restart de dictee-ptt..."
         systemctl --user restart dictee-ptt 2>/dev/null || true
     fi
 }
