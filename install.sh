@@ -60,13 +60,20 @@ auto_reset_services() {
         [[ -f "$conf_path" ]] || return 0
         uid=$(id -u "$target_user" 2>/dev/null) || return 0
         info "Configuration existante détectée — réinitialisation des services..."
-        sudo -u "$target_user" XDG_RUNTIME_DIR="/run/user/${uid}" \
-            dictee-reset >/dev/null 2>&1 || true
+        local _env=("XDG_RUNTIME_DIR=/run/user/${uid}")
+        sudo -u "$target_user" env "${_env[@]}" dictee-reset >/dev/null 2>&1 || true
+        # Belt-and-suspenders: restart dictee-ptt même si le dictee-reset
+        # installé est antérieur au commit 545cee8 (sans le restart PTT).
+        # Au 2e restart le venv pip est prêt → service passe en mode evdev
+        # (grab exclusif) au lieu de rester coincé en mode raw.
+        sudo -u "$target_user" env "${_env[@]}" \
+            systemctl --user restart dictee-ptt 2>/dev/null || true
     else
         conf_path="$HOME/.config/dictee.conf"
         [[ -f "$conf_path" ]] || return 0
         info "Configuration existante détectée — réinitialisation des services..."
         dictee-reset >/dev/null 2>&1 || true
+        systemctl --user restart dictee-ptt 2>/dev/null || true
     fi
 }
 
