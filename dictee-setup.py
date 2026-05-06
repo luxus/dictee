@@ -9834,6 +9834,37 @@ class DicteeSetupDialog(QDialog):
         self.cmb_llm_model.currentTextChanged.connect(
             lambda _t: self._check_llm_ollama_status())
 
+        # Disable thinking — critical UX for reasoning models (qwen3,
+        # deepseek-r1) where the <think>...</think> block adds 5-30s of
+        # latency per dictation. Default ON = thinking disabled.
+        self.chk_llm_think_disable = ToggleSwitch(
+            _("Disable reasoning (faster on qwen3, deepseek-r1, etc.)"))
+        self.chk_llm_think_disable.setChecked(
+            conf.get("DICTEE_LLM_THINK", "false").lower() != "true")
+        self.chk_llm_think_disable.setToolTip(_tt(_(
+            "Reasoning models emit a long <think>...</think> block before the answer. "
+            "Disable for push-to-talk dictation where latency matters more than nuance.")))
+        llm_flay.addRow("", self.chk_llm_think_disable)
+
+        # Context window (num_ctx) — preset list of common Ollama context
+        # sizes. 0 = use model default. Useful for long transcripts.
+        self.cmb_llm_num_ctx = QComboBox()
+        self.cmb_llm_num_ctx.addItem(_("Default (model)"), 0)
+        for _n in (2048, 4096, 8192, 16384, 32768, 65536, 131072):
+            self.cmb_llm_num_ctx.addItem(f"{_n:,}".replace(",", " "), _n)
+        try:
+            _saved_num_ctx = int(conf.get("DICTEE_LLM_NUM_CTX", "0") or "0")
+        except ValueError:
+            _saved_num_ctx = 0
+        _idx_ctx = self.cmb_llm_num_ctx.findData(_saved_num_ctx)
+        if _idx_ctx >= 0:
+            self.cmb_llm_num_ctx.setCurrentIndex(_idx_ctx)
+        self.cmb_llm_num_ctx.setToolTip(_tt(_(
+            "Override the LLM context window size. Default = use the model "
+            "default (usually 2048-4096). Raise for long transcripts. "
+            "Higher values use more VRAM/RAM.")))
+        llm_flay.addRow(_("Context window:"), self.cmb_llm_num_ctx)
+
         # System prompt presets
         self.cmb_llm_preset = QComboBox()
         self.cmb_llm_preset.addItem(_("Default"), "default")
@@ -9874,40 +9905,6 @@ class DicteeSetupDialog(QDialog):
         self.chk_llm_cpu = ToggleSwitch(_("Force CPU (free GPU VRAM)"))
         self.chk_llm_cpu.setChecked(conf.get("DICTEE_LLM_CPU", "false") == "true")
         llm_vbox.addWidget(self.chk_llm_cpu)
-
-        # Disable thinking — critical UX for reasoning models (qwen3,
-        # deepseek-r1) where the <think>...</think> block adds 5-30s of
-        # latency per dictation. Default ON = thinking disabled.
-        self.chk_llm_think_disable = ToggleSwitch(
-            _("Disable reasoning (faster on qwen3, deepseek-r1, etc.)"))
-        self.chk_llm_think_disable.setChecked(
-            conf.get("DICTEE_LLM_THINK", "false").lower() != "true")
-        self.chk_llm_think_disable.setToolTip(_tt(_(
-            "Reasoning models emit a long <think>...</think> block before the answer. "
-            "Disable for push-to-talk dictation where latency matters more than nuance.")))
-        llm_vbox.addWidget(self.chk_llm_think_disable)
-
-        # Context window (num_ctx) — let users override the default Ollama
-        # context size. 0 = use model default (typically 2048-4096).
-        # Useful for long transcripts that get truncated silently.
-        _num_ctx_row = QHBoxLayout()
-        _num_ctx_lbl = QLabel(_("Context window (tokens):"))
-        self.spin_llm_num_ctx = QSpinBox()
-        self.spin_llm_num_ctx.setRange(0, 131072)
-        self.spin_llm_num_ctx.setSingleStep(1024)
-        self.spin_llm_num_ctx.setSpecialValueText(_("Default (model)"))
-        try:
-            _saved_num_ctx = int(conf.get("DICTEE_LLM_NUM_CTX", "0") or "0")
-        except ValueError:
-            _saved_num_ctx = 0
-        self.spin_llm_num_ctx.setValue(max(0, _saved_num_ctx))
-        self.spin_llm_num_ctx.setToolTip(_tt(_(
-            "Override the LLM context window size. 0 = use the model default "
-            "(usually 2048-4096). Raise to 8192 or more for long transcripts. "
-            "Higher values use more VRAM/RAM.")))
-        _num_ctx_row.addWidget(_num_ctx_lbl)
-        _num_ctx_row.addWidget(self.spin_llm_num_ctx, 1)
-        llm_vbox.addLayout(_num_ctx_row)
 
     # ── LLM prompt presets ──────────────────────────────────────
 
@@ -16819,7 +16816,8 @@ class DicteeSetupDialog(QDialog):
         llm_custom_prompt = self.txt_llm_prompt.toPlainText() if hasattr(self, 'txt_llm_prompt') else ""
         # think: ToggleSwitch label is "Disable reasoning" → invert it (think=True if NOT checked)
         llm_think = (not self.chk_llm_think_disable.isChecked()) if hasattr(self, 'chk_llm_think_disable') else False
-        llm_num_ctx = self.spin_llm_num_ctx.value() if hasattr(self, 'spin_llm_num_ctx') else 0
+        # num_ctx: combo with preset values, data is the int (0 = default)
+        llm_num_ctx = (self.cmb_llm_num_ctx.currentData() or 0) if hasattr(self, 'cmb_llm_num_ctx') else 0
 
         # Continuation visual indicator
         continuation_indicator = (
