@@ -6764,9 +6764,10 @@ class DicteeSetupDialog(QDialog):
 
         # "No translation" toggle — first option in the page so users who
         # don't want any translation backend can skip the wizard step
-        # without arbitrarily picking one (issue #5).
+        # without arbitrarily picking one (issue #5). Use ToggleSwitch
+        # for visual consistency with other dictee-setup options.
         existing_trans = conf.get("DICTEE_TRANSLATE_BACKEND", "")
-        self._chk_trans_disabled = QCheckBox(
+        self._chk_trans_disabled = ToggleSwitch(
             _("No translation (configure later if needed)"))
         self._chk_trans_disabled.setChecked(not existing_trans)
         self._chk_trans_disabled.toggled.connect(self._on_trans_disabled_toggled)
