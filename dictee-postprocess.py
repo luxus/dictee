@@ -33,6 +33,10 @@ Environment variables:
   DICTEE_LLM_TIMEOUT       — timeout in seconds (default: 10)
   DICTEE_LLM_SYSTEM_PROMPT — preset name or "custom" (default: Correction FR)
   DICTEE_LLM_POSITION      — hybrid/first/last (default: hybrid)
+  DICTEE_LLM_THINK         — true/false (default: false) — reasoning mode
+                             on qwen3 / deepseek-r1 / etc. False = much faster
+  DICTEE_LLM_NUM_CTX       — int (default: empty = ollama decides) — context
+                             window size in tokens (raise for long transcripts)
 """
 
 import json as _json
@@ -1083,14 +1087,33 @@ def llm_postprocess(text):
     _dbg(f"LLM START model={model} preset={preset} position={position} "
          f"timeout={timeout}s input={len(text)} chars")
 
+    # think=False disables the <think>...</think> reasoning block on
+    # qwen3 / deepseek-r1 / etc. — critical for push-to-talk latency
+    # (5-30s saved per dictation). Mirrors dictee-diarize-llm.py:493.
+    think = os.environ.get("DICTEE_LLM_THINK", "false").lower() == "true"
     _payload_dict = {
         "model": model,
         "system": system_prompt,
         "prompt": text,
         "stream": False,
+        "think": think,
     }
+    # Build options dict — merge num_gpu + num_ctx if any
+    _options = {}
     if os.environ.get("OLLAMA_NUM_GPU") == "0":
-        _payload_dict["options"] = {"num_gpu": 0}
+        _options["num_gpu"] = 0
+    # num_ctx: explicitly set the model context window (Ollama default
+    # is 2048-4096 depending on model; raise for long transcripts).
+    # Empty / 0 / non-numeric → let Ollama use its default.
+    _num_ctx_raw = os.environ.get("DICTEE_LLM_NUM_CTX", "").strip()
+    try:
+        _num_ctx = int(_num_ctx_raw)
+        if _num_ctx > 0:
+            _options["num_ctx"] = _num_ctx
+    except ValueError:
+        pass
+    if _options:
+        _payload_dict["options"] = _options
     payload = _json.dumps(_payload_dict).encode("utf-8")
 
     t0 = _time.monotonic()
