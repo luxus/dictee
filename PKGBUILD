@@ -10,7 +10,7 @@
 
 pkgname=dictee
 pkgver=1.3.2
-pkgrel=2
+pkgrel=3
 _tag=1.3.2
 pkgdesc="Fast push-to-talk voice dictation for Linux (CPU build)"
 arch=('x86_64' 'aarch64')
@@ -40,7 +40,7 @@ optdepends=(
     'dictee-cuda: NVIDIA GPU acceleration (mutually exclusive)'
 )
 conflicts=('dictee-cuda')
-makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang')
+makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip')
 # Disable LTO — see PKGBUILD-cuda for the rationale (libonig.a + LTO
 # break the link with `undefined reference to onig_*` errors).
 options=('!lto')
@@ -181,8 +181,23 @@ package() {
     install -Dm644 pkg/dictee/usr/share/applications/dictee-transcribe.desktop "$pkgdir/usr/share/applications/dictee-transcribe.desktop"
 
     # Plasmoid
+    # Ship the bundle file under /usr/share/dictee/ for reference / re-deploy,
+    # AND extract it under /usr/share/plasma/plasmoids/<id>/ so Plasma 6
+    # auto-detects it in "Add Widgets" — mirrors what the .deb / .rpm do.
     if [ -f "dictee.plasmoid" ]; then
         install -Dm644 dictee.plasmoid "$pkgdir/usr/share/dictee/dictee.plasmoid"
+        install -d "$pkgdir/usr/share/plasma/plasmoids/com.github.rcspam.dictee"
+        unzip -q -o dictee.plasmoid \
+            -d "$pkgdir/usr/share/plasma/plasmoids/com.github.rcspam.dictee"
+        # Plasmoid locale .mo (separate gettext domain
+        # plasma_applet_com.github.rcspam.dictee)
+        for _lang in fr de es it pt uk; do
+            _mo="plasmoid/package/contents/locale/$_lang/LC_MESSAGES/plasma_applet_com.github.rcspam.dictee.mo"
+            if [ -f "$_mo" ]; then
+                install -Dm644 "$_mo" \
+                    "$pkgdir/usr/share/locale/$_lang/LC_MESSAGES/plasma_applet_com.github.rcspam.dictee.mo"
+            fi
+        done
     fi
 
     # Shared libraries
