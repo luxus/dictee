@@ -368,12 +368,116 @@ mode_online() {
             || die "Install failed"
     }
 
+    # Detect orphan files from a previous install.sh tarball mode that
+    # would cause pacman file conflicts (Arch is strict, dpkg/rpm overwrite
+    # silently — issue #4 follow-up).
+    check_arch_orphans() {
+        local static_files=(
+            /etc/modules-load.d/dictee-uinput.conf
+            /etc/udev/rules.d/80-dotool.rules
+            /etc/ld.so.conf.d/dictee.conf
+            /usr/lib/dictee/dictee-common.sh
+            /usr/lib/dictee/dictee_models.py
+            /usr/lib/systemd/user/dictee.service
+            /usr/lib/systemd/user/dictee-tray.service
+            /usr/lib/systemd/user/dictee-ptt.service
+            /usr/lib/systemd/user/dictee-vosk.service
+            /usr/lib/systemd/user/dictee-whisper.service
+            /usr/lib/systemd/user/dictee-canary.service
+            /usr/lib/systemd/user-preset/90-dictee.preset
+            /usr/share/applications/dictee-setup.desktop
+            /usr/share/applications/dictee-transcribe.desktop
+            /usr/share/applications/dictee-tray.desktop
+            /usr/share/dictee/dictee.conf.example
+            /usr/share/dictee/rules.conf.default
+            /usr/share/dictee/dictionary.conf.default
+            /usr/share/dictee/continuation.conf.default
+            /usr/share/dictee/VERSION
+            /usr/share/dictee/dictee.plasmoid
+        )
+        local glob_patterns=(
+            "/usr/bin/dictee"
+            "/usr/bin/dictee-"*
+            "/usr/bin/diarize-only"
+            "/usr/bin/transcribe"
+            "/usr/bin/transcribe-"*
+            "/usr/share/dictee/assets/banner-"*.svg
+            "/usr/share/dictee/assets/logos/"*.svg
+            "/usr/share/dictee/assets/icons/"*.svg
+            "/usr/share/icons/hicolor/scalable/apps/parakeet-"*.svg
+            "/usr/share/locale/"*"/LC_MESSAGES/dictee.mo"
+            "/usr/share/man/man1/dictee"*.1
+            "/usr/share/man/fr/man1/dictee"*.1
+        )
+
+        local candidates=()
+        local f
+        for f in "${static_files[@]}"; do
+            [[ -e "$f" ]] && candidates+=("$f")
+        done
+        local pattern
+        for pattern in "${glob_patterns[@]}"; do
+            for f in $pattern; do
+                [[ -e "$f" ]] && candidates+=("$f")
+            done
+        done
+
+        # Filter to orphans only (not owned by any pacman package)
+        local orphans=()
+        for f in "${candidates[@]}"; do
+            if ! pacman -Qo "$f" >/dev/null 2>&1; then
+                orphans+=("$f")
+            fi
+        done
+
+        if [[ ${#orphans[@]} -eq 0 ]]; then
+            return 0
+        fi
+
+        warn "Detected ${#orphans[@]} orphan file(s) from a previous install"
+        warn "(probably from a previous install.sh tarball mode):"
+        local o
+        for o in "${orphans[@]}"; do
+            warn "  $o"
+        done
+        warn ""
+        warn "These will cause pacman file conflicts during the dictee install."
+
+        if [[ $NON_INTERACTIVE -eq 1 ]]; then
+            warn ""
+            warn "Non-interactive mode → cannot prompt. Remove them manually:"
+            warn "  sudo rm ${orphans[*]}"
+            die "Aborted: orphan files present, cannot auto-clean in --non-interactive mode."
+        fi
+
+        echo
+        local REPLY=""
+        read -rp "Remove these orphan files now? [Y/n] " REPLY < /dev/tty || REPLY="y"
+        if [[ "$REPLY" =~ ^[Nn] ]]; then
+            die "Aborted. Remove orphan files manually and retry."
+        fi
+
+        info "Removing orphan files..."
+        for o in "${orphans[@]}"; do
+            if sudo rm -f "$o" 2>/dev/null; then
+                ok "Removed: $o"
+            else
+                warn "Failed to remove: $o"
+            fi
+        done
+        ok "Orphan cleanup complete."
+    }
+
     install_arch() {
         need git
         command -v makepkg >/dev/null 2>&1 \
             || die "makepkg missing — install base-devel first: sudo pacman -S --needed base-devel"
         command -v cargo >/dev/null 2>&1 \
             || die "cargo missing — install rust first: sudo pacman -S --needed rust"
+
+        # Clean up orphan files from a previous tarball-mode install before
+        # makepkg -si triggers pacman file conflicts.
+        check_arch_orphans
 
         # dictee depends on 'dotool' which lives in AUR, not the official repos.
         # makepkg alone cannot resolve AUR deps → we need an AUR helper (yay/paru).
