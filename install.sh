@@ -504,9 +504,13 @@ mode_online() {
         "$aur_helper" -S --needed --noconfirm dotool \
             || die "${aur_helper} failed to install dotool"
 
-        info "Cloning the dictee repository..."
-        git clone --depth 1 --branch "$RELEASE_TAG" "https://github.com/${REPO}.git" dictee-src \
-            || git clone --depth 1 "https://github.com/${REPO}.git" dictee-src
+        info "Cloning the dictee repository (master)..."
+        # Always clone master for Arch: PKGBUILD packaging fixes (orphan
+        # cleanup, dependency tweaks, .install hooks) must ship without a
+        # full version bump. The actual binary version is pinned in
+        # Cargo.toml on master, which makepkg picks up automatically.
+        # Other distros use the .deb / .rpm assets from the release tag.
+        git clone --depth 1 "https://github.com/${REPO}.git" dictee-src
         cd dictee-src
 
         info "Building via makepkg (this will compile from source)..."
