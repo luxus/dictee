@@ -226,6 +226,21 @@ QT_TO_LINUX_KEYCODE = {
     0x01000039: 68,   # F10
     0x0100003a: 87,   # F11
     0x0100003b: 88,   # F12
+    # F13-F24 (gaming / programmable keyboards, xkb mapping) — issue #5
+    # (cross-check Handy #1019 + #1105). Codes from
+    # /usr/include/linux/input-event-codes.h (KEY_F13..KEY_F24).
+    0x0100003c: 183,  # F13
+    0x0100003d: 184,  # F14
+    0x0100003e: 185,  # F15
+    0x0100003f: 186,  # F16
+    0x01000040: 187,  # F17
+    0x01000041: 188,  # F18
+    0x01000042: 189,  # F19
+    0x01000043: 190,  # F20
+    0x01000044: 191,  # F21
+    0x01000045: 192,  # F22
+    0x01000046: 193,  # F23
+    0x01000047: 194,  # F24
     0x01000000: 1,    # Escape
     0x01000010: 110,  # Home
     0x01000011: 107,  # End
@@ -234,12 +249,19 @@ QT_TO_LINUX_KEYCODE = {
     0x01000017: 104,  # Pause/Break
     0x01000009: 210,  # Print Screen (SysRq)
     0x01000025: 14,   # Backspace — non, pas utile
+    # Backtick / grave accent — KEY_GRAVE=41. Useful as PTT key on
+    # AZERTY/QWERTY layouts (rarely-used dedicated key).
+    0x60: 41,         # ` (backtick / grave)
 }
 
 LINUX_KEYCODE_NAMES = {
     59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5", 64: "F6",
     65: "F7", 66: "F8", 67: "F9", 68: "F10", 87: "F11", 88: "F12",
+    183: "F13", 184: "F14", 185: "F15", 186: "F16", 187: "F17", 188: "F18",
+    189: "F19", 190: "F20", 191: "F21", 192: "F22", 193: "F23", 194: "F24",
     1: "Escape", 110: "Home", 107: "End", 119: "Delete", 118: "Insert",
+    104: "Pause", 210: "Print",
+    41: "`",
 }
 
 
@@ -14382,7 +14404,8 @@ class DicteeSetupDialog(QDialog):
             key_str = seq.toString() if seq else "?"
             self.lbl_ptt_warning.setText(
                 '<span style="color: red;">⚠ ' +
-                _("Key '{key}' is not supported. Use a function key (F1-F12).").format(key=key_str) +
+                _("Key '{key}' is not supported. Use a function key (F1-F24), "
+                  "the backtick (`) or a special key (Home, End, Insert, etc.).").format(key=key_str) +
                 '</span>'
             )
             self.lbl_ptt_warning.setVisible(True)
@@ -14410,8 +14433,8 @@ class DicteeSetupDialog(QDialog):
         if code in dangerous:
             lbl.setText(
                 '<span style="color: orange;">⚠ ' +
-                _("This key is used for typing. Prefer a function key (F1-F12) "
-                  "or a special key (Home, End, Insert, etc.).") +
+                _("This key is used for typing. Prefer a function key (F1-F24), "
+                  "the backtick (`) or a special key (Home, End, Insert, etc.).") +
                 '</span>'
             )
             lbl.setVisible(True)
