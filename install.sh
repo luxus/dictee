@@ -504,6 +504,15 @@ mode_online() {
         "$aur_helper" -S --needed --noconfirm dotool \
             || die "${aur_helper} failed to install dotool"
 
+        # translate-shell is in optdepends of the PKGBUILD (so makepkg -si
+        # won't install it), but DEB/RPM packages have it as Recommends and
+        # apt/dnf install it by default. Install it here for cross-distro
+        # consistency — it's in the official Arch `extra` repo (~5 MB),
+        # provides the `trans` CLI used by Google/Bing translation backends.
+        info "Installing translate-shell (Google/Bing translation)..."
+        sudo pacman -S --needed --noconfirm translate-shell \
+            || warn "Failed to install translate-shell — Google/Bing translation will be unavailable"
+
         info "Cloning the dictee repository (master)..."
         # Always clone master for Arch: PKGBUILD packaging fixes (orphan
         # cleanup, dependency tweaks, .install hooks) must ship without a
