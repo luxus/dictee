@@ -335,6 +335,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 llm_timeout=10, llm_cpu=False,
                 llm_system_prompt="default", llm_position="hybrid",
                 llm_custom_prompt="",
+                llm_think=False, llm_num_ctx=0,
                 continuation_indicator=">>",
                 audio_context=False, audio_context_timeout=30,
                 silence_rms=0.03,
@@ -445,6 +446,11 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
             values["DICTEE_LLM_CPU"] = "true"
         values["DICTEE_LLM_SYSTEM_PROMPT"] = _s(llm_system_prompt)
         values["DICTEE_LLM_POSITION"] = llm_position
+        # Reasoning + context window (Ollama-only options for the
+        # post-process pipeline — see dictee-postprocess.py).
+        values["DICTEE_LLM_THINK"] = "true" if llm_think else "false"
+        if llm_num_ctx and int(llm_num_ctx) > 0:
+            values["DICTEE_LLM_NUM_CTX"] = str(int(llm_num_ctx))
         # Save custom prompt to file
         _custom_path = os.path.join(
             os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
@@ -482,6 +488,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
         "DICTEE_LIBRETRANSLATE_LANGS", "DICTEE_OLLAMA_MODEL",
         "OLLAMA_NUM_GPU", "DICTEE_LLM_POSTPROCESS",
         "DICTEE_LLM_MODEL", "DICTEE_LLM_TIMEOUT", "DICTEE_LLM_CPU",
+        "DICTEE_LLM_THINK", "DICTEE_LLM_NUM_CTX",
         "DICTEE_DEBUG", "DICTEE_PP_SHORT_TEXT_MAX",
         "DICTEE_ANIMATION",  # legacy, replaced by ANIM_SPEECH + ANIM_PLASMOID
     }
@@ -9868,6 +9875,40 @@ class DicteeSetupDialog(QDialog):
         self.chk_llm_cpu.setChecked(conf.get("DICTEE_LLM_CPU", "false") == "true")
         llm_vbox.addWidget(self.chk_llm_cpu)
 
+        # Disable thinking — critical UX for reasoning models (qwen3,
+        # deepseek-r1) where the <think>...</think> block adds 5-30s of
+        # latency per dictation. Default ON = thinking disabled.
+        self.chk_llm_think_disable = ToggleSwitch(
+            _("Disable reasoning (faster on qwen3, deepseek-r1, etc.)"))
+        self.chk_llm_think_disable.setChecked(
+            conf.get("DICTEE_LLM_THINK", "false").lower() != "true")
+        self.chk_llm_think_disable.setToolTip(_tt(_(
+            "Reasoning models emit a long <think>...</think> block before the answer. "
+            "Disable for push-to-talk dictation where latency matters more than nuance.")))
+        llm_vbox.addWidget(self.chk_llm_think_disable)
+
+        # Context window (num_ctx) — let users override the default Ollama
+        # context size. 0 = use model default (typically 2048-4096).
+        # Useful for long transcripts that get truncated silently.
+        _num_ctx_row = QHBoxLayout()
+        _num_ctx_lbl = QLabel(_("Context window (tokens):"))
+        self.spin_llm_num_ctx = QSpinBox()
+        self.spin_llm_num_ctx.setRange(0, 131072)
+        self.spin_llm_num_ctx.setSingleStep(1024)
+        self.spin_llm_num_ctx.setSpecialValueText(_("Default (model)"))
+        try:
+            _saved_num_ctx = int(conf.get("DICTEE_LLM_NUM_CTX", "0") or "0")
+        except ValueError:
+            _saved_num_ctx = 0
+        self.spin_llm_num_ctx.setValue(max(0, _saved_num_ctx))
+        self.spin_llm_num_ctx.setToolTip(_tt(_(
+            "Override the LLM context window size. 0 = use the model default "
+            "(usually 2048-4096). Raise to 8192 or more for long transcripts. "
+            "Higher values use more VRAM/RAM.")))
+        _num_ctx_row.addWidget(_num_ctx_lbl)
+        _num_ctx_row.addWidget(self.spin_llm_num_ctx, 1)
+        llm_vbox.addLayout(_num_ctx_row)
+
     # ── LLM prompt presets ──────────────────────────────────────
 
     _LLM_SYSTEM_PROMPTS = {
@@ -16776,6 +16817,9 @@ class DicteeSetupDialog(QDialog):
         llm_system_prompt = self.cmb_llm_preset.currentData() if hasattr(self, 'cmb_llm_preset') else "correction-fr"
         llm_position = self._get_llm_position() if hasattr(self, '_get_llm_position') else "hybrid"
         llm_custom_prompt = self.txt_llm_prompt.toPlainText() if hasattr(self, 'txt_llm_prompt') else ""
+        # think: ToggleSwitch label is "Disable reasoning" → invert it (think=True if NOT checked)
+        llm_think = (not self.chk_llm_think_disable.isChecked()) if hasattr(self, 'chk_llm_think_disable') else False
+        llm_num_ctx = self.spin_llm_num_ctx.value() if hasattr(self, 'spin_llm_num_ctx') else 0
 
         # Continuation visual indicator
         continuation_indicator = (
@@ -16828,6 +16872,8 @@ class DicteeSetupDialog(QDialog):
                     llm_system_prompt=llm_system_prompt,
                     llm_position=llm_position,
                     llm_custom_prompt=llm_custom_prompt,
+                    llm_think=llm_think,
+                    llm_num_ctx=llm_num_ctx,
                     continuation_indicator=continuation_indicator,
                     audio_context=audio_context,
                     audio_context_timeout=audio_context_timeout,
