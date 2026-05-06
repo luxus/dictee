@@ -931,12 +931,24 @@ def get_gpu_vram_gb():
 
 
 def check_cuda_gpu_ready():
-    """Check if CUDA GPU acceleration is usable (cuDNN installed).
-    Returns (gpu_detected, cudnn_ok, message)."""
-    total, _free = get_gpu_vram_gb()
-    if total == 0:
+    """Check if CUDA GPU acceleration is usable (NVIDIA + cuDNN installed).
+    Returns (gpu_detected, cudnn_ok, message).
+
+    Note: must specifically detect NVIDIA (not just "any GPU"). get_gpu_vram_gb()
+    falls back to AMD via /sys/class/drm/, which would give a false positive
+    "NVIDIA detected" on full-AMD machines (issue #5)."""
+    # Strict NVIDIA detection — nvidia-smi must exist AND succeed.
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False, False, ""
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return False, False, ""
-    # GPU detected — check cuDNN
+    # NVIDIA GPU detected — check cuDNN
     try:
         import ctypes
         ctypes.cdll.LoadLibrary("libcudnn.so.9")
@@ -2894,6 +2906,35 @@ class TestTranslateThread(QThread):
     def _translate_text(self, text):
         """Translate text using the configured backend."""
         if self._trans_backend.startswith("trans"):
+            # Verify the 'trans' CLI from translate-shell is installed before
+            # invoking subprocess.run — otherwise the user gets a cryptic
+            # "[Errno 2] No such file or directory: 'trans'" (issue #5).
+            import shutil
+            if not shutil.which("trans"):
+                # Distro-specific install hint
+                distro_id = ""
+                try:
+                    with open("/etc/os-release") as f:
+                        for line in f:
+                            if line.startswith("ID="):
+                                distro_id = line.strip().split("=", 1)[1].strip('"')
+                                break
+                except OSError:
+                    pass
+                if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+                    hint = "sudo apt install translate-shell"
+                elif distro_id in ("fedora", "nobara", "rhel", "centos"):
+                    hint = "sudo dnf install translate-shell"
+                elif distro_id in ("arch", "manjaro", "endeavouros"):
+                    hint = "sudo pacman -S translate-shell"
+                elif distro_id in ("opensuse-tumbleweed", "opensuse-leap"):
+                    hint = "sudo zypper install translate-shell"
+                else:
+                    hint = _("install the 'translate-shell' package")
+                raise RuntimeError(_(
+                    "translate-shell is not installed. "
+                    "Install it with:\n  {hint}"
+                ).format(hint=hint))
             engine = self._trans_engine
             r = subprocess.run(
                 ["trans", "-b", "-e", engine,
@@ -6721,6 +6762,16 @@ class DicteeSetupDialog(QDialog):
         title_row.addWidget(btn_help_tr)
         lay.addLayout(title_row)
 
+        # "No translation" toggle — first option in the page so users who
+        # don't want any translation backend can skip the wizard step
+        # without arbitrarily picking one (issue #5).
+        existing_trans = conf.get("DICTEE_TRANSLATE_BACKEND", "")
+        self._chk_trans_disabled = QCheckBox(
+            _("No translation (configure later if needed)"))
+        self._chk_trans_disabled.setChecked(not existing_trans)
+        self._chk_trans_disabled.toggled.connect(self._on_trans_disabled_toggled)
+        lay.addWidget(self._chk_trans_disabled)
+
         asr = self._wizard_asr if hasattr(self, '_wizard_asr') else conf.get("DICTEE_ASR_BACKEND", "parakeet")
         is_canary = (asr == "canary")
 
@@ -6804,6 +6855,12 @@ class DicteeSetupDialog(QDialog):
         last_bid = getattr(self, '_last_trans_click_bid', None)
         self._last_trans_click_time = now
         self._last_trans_click_bid = backend_id
+        # Picking a backend implies the user wants translation enabled —
+        # un-tick the "No translation" checkbox if it was on (issue #5).
+        if hasattr(self, '_chk_trans_disabled') and self._chk_trans_disabled.isChecked():
+            self._chk_trans_disabled.blockSignals(True)
+            self._chk_trans_disabled.setChecked(False)
+            self._chk_trans_disabled.blockSignals(False)
         self._select_trans_radio(backend_id)
         if backend_id == last_bid and (now - last) < 0.4:
             self._wizard_next()
@@ -16587,11 +16644,17 @@ class DicteeSetupDialog(QDialog):
                 trans_data = f"trans:{wt}"
             elif wt in ("libretranslate", "ollama"):
                 trans_data = wt
+            elif wt == "":
+                # User explicitly disabled translation (issue #5)
+                trans_data = ""
             else:
                 trans_data = "trans:google"
         else:
             trans_data = self.cmb_trans_backend.currentData()
-        if trans_data == "ollama":
+        if trans_data == "":
+            # No translation — empty backend means feature disabled (issue #5)
+            backend = ""
+        elif trans_data == "ollama":
             backend = "ollama"
         elif trans_data == "libretranslate":
             backend = "libretranslate"
