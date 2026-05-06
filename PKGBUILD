@@ -10,7 +10,7 @@
 
 pkgname=dictee
 pkgver=1.3.2
-pkgrel=1
+pkgrel=2
 _tag=1.3.2
 pkgdesc="Fast push-to-talk voice dictation for Linux (CPU build)"
 arch=('x86_64' 'aarch64')
@@ -134,7 +134,8 @@ package() {
     install -Dm644 pkg/dictee/usr/lib/systemd/user/dictee-vosk.service "$pkgdir/usr/lib/systemd/user/dictee-vosk.service"
     install -Dm644 pkg/dictee/usr/lib/systemd/user/dictee-whisper.service "$pkgdir/usr/lib/systemd/user/dictee-whisper.service"
     install -Dm644 pkg/dictee/usr/lib/systemd/user/dictee-canary.service "$pkgdir/usr/lib/systemd/user/dictee-canary.service"
-    install -Dm644 pkg/dictee/usr/lib/systemd/user/dotoold.service "$pkgdir/usr/lib/systemd/user/dotoold.service"
+    # Note: dotoold.service is shipped by the AUR `dotool` package (declared in depends).
+    # Shipping it here causes a pacman file conflict. See GitHub issue #4.
     install -Dm644 pkg/dictee/usr/lib/systemd/user-preset/90-dictee.preset "$pkgdir/usr/lib/systemd/user-preset/90-dictee.preset"
 
     # Man pages
