@@ -764,6 +764,28 @@ EOF
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger /dev/uinput 2>/dev/null || true
 
+    # --- Postprocess venv (text2num for number conversion) ---
+    # Mirrors postinst .deb / %post .rpm / dictee.install Arch — without it,
+    # dictee-postprocess crashes when it hits a number-conversion step.
+    if command -v python3 >/dev/null 2>&1; then
+        local PP_VENV="/usr/share/dictee/postprocess-env"
+        if [[ ! -d "$PP_VENV" ]]; then
+            info "Creating postprocess venv (text2num)"
+            if python3 -m venv "$PP_VENV" 2>/dev/null; then
+                "$PP_VENV/bin/pip" install --quiet --upgrade pip 2>/dev/null || true
+                if "$PP_VENV/bin/pip" install --quiet text2num 2>/dev/null; then
+                    ok "Postprocess venv ready"
+                else
+                    warn "pip install text2num failed (offline?) — number conversion will be disabled"
+                fi
+            else
+                warn "python3 -m venv failed — is python3-venv installed?"
+            fi
+        else
+            "$PP_VENV/bin/pip" install --quiet --upgrade text2num 2>/dev/null || true
+        fi
+    fi
+
     # --- input group (dotool needs /dev/uinput) ---
     # No reboot needed: dictee-ptt.service runs the daemon under
     # `sg input -c …` so the new group is effective immediately.
