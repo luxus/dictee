@@ -452,7 +452,7 @@ fn stop_daemons_for_vram() -> bool {
     true
 }
 
-#[cfg(feature = "sortformer")]
+#[cfg(all(feature = "sortformer", feature = "cuda"))]
 fn restart_daemons() {
     let conf_path = format!(
         "{}/.config/dictee.conf",
