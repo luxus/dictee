@@ -1,3 +1,28 @@
+_install_uinput_drop_in() {
+    # The AUR `dotool` package ships /usr/lib/udev/rules.d/80-dotool.rules
+    # with MODE="0620" (write-only for the input group). python-evdev opens
+    # /dev/uinput with O_RDWR (read+write), which fails with that mode →
+    # dictee-ptt.service crashes with "could not open uinput device in
+    # write mode" and the PTT shortcut silently doesn't work.
+    #
+    # The .deb postinst and .rpm %post fix this by `sed`ing the rule file
+    # they ship themselves in /etc/udev/rules.d/. On Arch we don't ship
+    # the rule (file conflict with the dotool AUR package would block
+    # the install), so we drop a higher-priority override into /etc/
+    # which: (1) is honored by udev because /etc/ overrides /usr/lib/,
+    # (2) survives `pacman -S dotool` upgrades that would otherwise
+    # reset the rule shipped by AUR.
+    DROP_IN="/etc/udev/rules.d/81-dictee-uinput.rules"
+    cat > "$DROP_IN" <<'RULES'
+# Drop-in installed by dictee. Overrides MODE from /usr/lib/udev/rules.d/80-dotool.rules.
+# python-evdev (used by dictee-ptt) opens /dev/uinput with O_RDWR, so we need
+# read+write for the input group, not just write (0620).
+KERNEL=="uinput", MODE="0660"
+RULES
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --action=change /dev/uinput 2>/dev/null || true
+}
+
 _setup_user_groups() {
     # Add logged-in users to the 'input' group (dotool / dictee-ptt
     # need /dev/uinput access) and 'docker' group when docker is
@@ -26,6 +51,7 @@ post_install() {
     # /etc/modules-load.d/dictee-uinput.conf handles subsequent boots.
     modprobe uinput 2>/dev/null || true
 
+    _install_uinput_drop_in
     _setup_user_groups
 
     # Create Python venv for text2num (number conversion)
@@ -44,6 +70,7 @@ post_install() {
 post_upgrade() {
     modprobe uinput 2>/dev/null || true
 
+    _install_uinput_drop_in
     _setup_user_groups
 
     PP_VENV="/usr/share/dictee/postprocess-env"
@@ -57,4 +84,5 @@ post_upgrade() {
 
 pre_remove() {
     rm -rf /usr/share/dictee/postprocess-env
+    rm -f /etc/udev/rules.d/81-dictee-uinput.rules
 }
