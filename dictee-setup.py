@@ -4943,7 +4943,17 @@ class DicteeSetupDialog(QDialog):
                 self._pipeline_mode = "normal"
         # Derived booleans for code that still reads them
         self._pp_master_normal = True  # PP normal always on
-        self._pp_master_translate = (self._pipeline_mode == "full_chain")
+        # Read DICTEE_PP_TRANSLATE directly: it's what the toggle saves
+        # (line 16874 / save_config arg pp_translate). Deriving from
+        # _pipeline_mode == "full_chain" is wrong because full_chain
+        # requires DICTEE_TRANSLATE=true, but DICTEE_TRANSLATE is runtime-only
+        # (feedback-never-persist-translate.md) — it's set on the fly via the
+        # --translate flag and never written to dictee.conf as true. So
+        # _pipeline_mode at reload is always "normal", and the toggle would
+        # always reload OFF regardless of what the user picked (issue #6).
+        self._pp_master_translate = (
+            (self.conf.get("DICTEE_PP_TRANSLATE", "true") or "true").lower() == "true"
+        )
 
         # Prevent accidental scroll on interactive widgets (must be before UI build)
         self._scroll_guard = ScrollGuardFilter(self)
