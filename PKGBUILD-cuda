@@ -13,7 +13,7 @@
 
 pkgname=dictee-cuda
 pkgver=1.3.2
-pkgrel=3
+pkgrel=4
 _tag=1.3.2
 pkgdesc="Fast push-to-talk voice dictation for Linux (NVIDIA CUDA build)"
 arch=('x86_64')
@@ -44,7 +44,7 @@ optdepends=(
 )
 provides=('dictee')
 conflicts=('dictee' 'dictee-cpu')
-makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip')
+makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip' 'zip')
 # Disable LTO. /etc/makepkg.conf enables it globally on Arch, but linking
 # a Rust binary against the non-LTO libonig.a static archive (built by
 # the onig_sys crate) under LTO triggers `undefined reference to onig_*`

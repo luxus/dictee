@@ -10,7 +10,7 @@
 
 pkgname=dictee
 pkgver=1.3.2
-pkgrel=3
+pkgrel=4
 _tag=1.3.2
 pkgdesc="Fast push-to-talk voice dictation for Linux (CPU build)"
 arch=('x86_64' 'aarch64')
@@ -40,7 +40,7 @@ optdepends=(
     'dictee-cuda: NVIDIA GPU acceleration (mutually exclusive)'
 )
 conflicts=('dictee-cuda')
-makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip')
+makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip' 'zip')
 # Disable LTO — see PKGBUILD-cuda for the rationale (libonig.a + LTO
 # break the link with `undefined reference to onig_*` errors).
 options=('!lto')
