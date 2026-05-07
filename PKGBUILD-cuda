@@ -50,7 +50,10 @@ makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip' 'zip')
 # the onig_sys crate) under LTO triggers `undefined reference to onig_*`
 # errors at the final link step. LTO would discard sections from the .a
 # that the linker hasn't yet observed referenced.
-options=('!lto')
+# Disable debug — Rust release binaries are already stripped, so the
+# generated `dictee-cuda-debug` sibling package is empty and lingers
+# after `pacman -Rns dictee-cuda` (not a hard dep of the main package).
+options=('!lto' '!debug')
 install=dictee-cuda.install
 # ONNX Runtime version must match the version expected by the `ort`
 # crate used in dictee. Bumping `ort` requires bumping this URL too.

@@ -43,7 +43,11 @@ conflicts=('dictee-cuda')
 makedepends=('rust' 'cargo' 'gettext' 'git' 'cmake' 'clang' 'unzip' 'zip')
 # Disable LTO — see PKGBUILD-cuda for the rationale (libonig.a + LTO
 # break the link with `undefined reference to onig_*` errors).
-options=('!lto')
+# Disable debug — Rust release binaries are already stripped, so the
+# generated `dictee-debug` sibling package is empty (gdb-add-index
+# emits "No debugging symbols" warnings) and lingers after `pacman
+# -Rns dictee` because it's not a hard dep of the main package.
+options=('!lto' '!debug')
 install=dictee.install
 source=("$pkgname-$_tag.tar.gz::https://github.com/rcspam/dictee/archive/v$_tag.tar.gz")
 sha256sums=('SKIP')
