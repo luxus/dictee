@@ -1991,7 +1991,35 @@ def docker_is_installed():
     return shutil.which("docker") is not None
 
 
-_docker_use_sg = False  # set to True after pkexec usermod -aG docker
+def _detect_docker_sg_needed():
+    """User belongs to docker group in /etc/group but not in this process's
+    effective groups → group was added in a session ancestor (install.sh
+    `usermod`, %post, postinst…) and won't take effect until next login.
+    Use `sg docker` to bridge the gap without forcing a reboot.
+
+    Covers the case where dictee-setup is launched by install.sh right
+    after `usermod -aG docker $USER` — without this, the wizard would
+    say "permission denied" for every docker call until the user logs
+    out and back in.
+    """
+    try:
+        import grp
+        user = os.environ.get("USER") or ""
+        if not user:
+            return False
+        members = grp.getgrnam("docker").gr_mem
+        if user not in members:
+            return False
+        docker_gid = grp.getgrnam("docker").gr_gid
+        return docker_gid not in os.getgroups()
+    except (KeyError, OSError):
+        return False
+
+
+# True when the docker group is in /etc/group for the user but not yet
+# effective in this process — set automatically at startup, and again
+# after pkexec usermod -aG docker (Setup Docker button in the wizard).
+_docker_use_sg = _detect_docker_sg_needed()
 
 
 def docker_cmd(args, **kwargs):
