@@ -487,22 +487,31 @@ mode_online() {
         done
 
         if [[ -z "$aur_helper" ]]; then
-            warn "No AUR helper (yay/paru) found."
-            warn "dictee depends on 'dotool' from AUR, which makepkg cannot install on its own."
-            warn ""
-            warn "Install an AUR helper first:"
-            warn "  sudo pacman -S --needed git base-devel"
-            warn "  git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si"
-            warn ""
-            warn "Then re-run this installer, or install dictee directly via:"
-            warn "  yay -S dictee   # if dictee is published to AUR"
-            die "Missing AUR helper"
+            # Fallback : bootstrap dotool directement via git+makepkg sans
+            # dépendre d'un AUR helper installé. Évite le poulet/œuf yay/paru
+            # qui sont eux-mêmes dans l'AUR. Self-contained sur Arch fresh.
+            info "No AUR helper found — bootstrapping 'dotool' directly via makepkg"
+            command -v git >/dev/null 2>&1 \
+                || die "git missing — sudo pacman -S --needed git"
+            local _aur_tmpdir
+            _aur_tmpdir=$(mktemp -d -t dictee-aur-bootstrap.XXXXXX)
+            if ! git clone --depth 1 https://aur.archlinux.org/dotool.git \
+                    "$_aur_tmpdir/dotool" 2>&1; then
+                rm -rf "$_aur_tmpdir"
+                die "Failed to clone dotool from AUR (offline?)"
+            fi
+            if ! (cd "$_aur_tmpdir/dotool" && makepkg -si --noconfirm); then
+                rm -rf "$_aur_tmpdir"
+                die "Failed to build/install dotool — see makepkg output above"
+            fi
+            rm -rf "$_aur_tmpdir"
+            ok "dotool installed (no AUR helper required)"
+        else
+            info "Using AUR helper: ${C_BOLD}${aur_helper}${C_OFF}"
+            info "Installing AUR dependency 'dotool'..."
+            "$aur_helper" -S --needed --noconfirm dotool \
+                || die "${aur_helper} failed to install dotool"
         fi
-
-        info "Using AUR helper: ${C_BOLD}${aur_helper}${C_OFF}"
-        info "Installing AUR dependency 'dotool'..."
-        "$aur_helper" -S --needed --noconfirm dotool \
-            || die "${aur_helper} failed to install dotool"
 
         # translate-shell is in optdepends of the PKGBUILD (so makepkg -si
         # won't install it), but DEB/RPM packages have it as Recommends and
