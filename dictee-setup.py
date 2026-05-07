@@ -6919,6 +6919,21 @@ class DicteeSetupDialog(QDialog):
                 self._trans_cards[prev].setStyleSheet(self._card_style(False))
             self._wizard_trans = ""
 
+    def _on_trans_disabled_classic_toggled(self, checked):
+        """Mode classique : disable le combo backend + widgets dépendants
+        quand "No translation" est coché. Au save, _on_apply écrira
+        DICTEE_TRANSLATE_BACKEND="" si checkbox cochée (issue #5)."""
+        # Combo backend principal
+        if hasattr(self, 'cmb_trans_backend'):
+            self.cmb_trans_backend.setEnabled(not checked)
+        # Widgets dépendants du backend (LT, Ollama, target lang, etc.)
+        # — on les disable visuellement pour signaler que rien ne sera
+        # sauvegardé même si l'user touche aux contrôles dépendants.
+        for _attr in ('lt_widget', 'ollama_widget', 'combo_tgt'):
+            _w = getattr(self, _attr, None)
+            if _w is not None:
+                _w.setEnabled(not checked)
+
     # -- Wizard Page 5: Translation config --
 
     def _build_wizard_page5(self, conf):
@@ -8280,7 +8295,26 @@ class DicteeSetupDialog(QDialog):
             lbl_backend.deleteLater()
             self.cmb_trans_backend.setParent(None)
         else:
+            # Mode classique : ToggleSwitch "No translation" au-dessus du
+            # combo backend (parité avec le wizard — issue #5 ClarkBoggle).
+            # Note : insérer AVANT le label "Backend:" déjà ajouté par
+            # lay_tr.addWidget(lbl_backend) ligne plus haut.
+            existing_trans = conf.get("DICTEE_TRANSLATE_BACKEND", "")
+            self._chk_trans_disabled = ToggleSwitch(
+                _("No translation (configure later if needed)"))
+            self._chk_trans_disabled.setChecked(not existing_trans)
+            self._chk_trans_disabled.toggled.connect(
+                self._on_trans_disabled_classic_toggled)
+            # Insert before lbl_backend in the layout
+            _idx_backend = lay_tr.indexOf(lbl_backend)
+            if _idx_backend >= 0:
+                lay_tr.insertWidget(_idx_backend, self._chk_trans_disabled)
+            else:
+                lay_tr.addWidget(self._chk_trans_disabled)
             lay_tr.addWidget(self.cmb_trans_backend)
+            # Apply initial state (disable combo if "No translation" checked)
+            self._on_trans_disabled_classic_toggled(
+                self._chk_trans_disabled.isChecked())
 
         # LibreTranslate widget
         self.lt_widget = QFrame()
@@ -16724,7 +16758,12 @@ class DicteeSetupDialog(QDialog):
             else:
                 trans_data = "trans:google"
         else:
-            trans_data = self.cmb_trans_backend.currentData()
+            # Mode classique : respecter le ToggleSwitch "No translation"
+            # quand il est coché (issue #5, demandé par ClarkBoggle)
+            if hasattr(self, '_chk_trans_disabled') and self._chk_trans_disabled.isChecked():
+                trans_data = ""
+            else:
+                trans_data = self.cmb_trans_backend.currentData()
         if trans_data == "":
             # No translation — empty backend means feature disabled (issue #5)
             backend = ""
