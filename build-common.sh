@@ -87,4 +87,26 @@ dict_prepare_pkg_dir() {
         mkdir -p "$PKG_DIR/usr/share/dictee/locale/$lang/LC_MESSAGES"
         cp "po/$lang.mo" "$PKG_DIR/usr/share/dictee/locale/$lang/LC_MESSAGES/dictee.mo"
     done
+
+    # KDE Plasma 6 widget — single source of truth for the .plasmoid zip.
+    # Re-built every run from the up-to-date plasmoid/package/ tree so that
+    # build-deb.sh / build-rpm.sh / build-tar.sh (and any caller) all embed
+    # the same just-built artifact. Previously each builder re-zipped the
+    # widget independently (build-deb.sh) or copied a stale pre-existing
+    # zip (build-rpm.sh) — leading to silent skew when one was run before
+    # the other (e.g. build-rpm.sh first → embedded plasmoid pre-dated the
+    # latest QML fixes; observed 2026-05-07).
+    if [ -d "./plasmoid/package" ] && command -v zip >/dev/null 2>&1; then
+        # Regenerate Defaults.js from config/main.xml (source of truth for
+        # kcfg defaults, used by the "Reset icon settings" button).
+        if [ -x plasmoid/gen-defaults.py ]; then
+            python3 plasmoid/gen-defaults.py 2>/dev/null || true
+        fi
+        local _abs_pkg_dir
+        _abs_pkg_dir=$(cd "$PKG_DIR" && pwd)
+        rm -f "$_abs_pkg_dir/usr/share/dictee/dictee.plasmoid"
+        (cd ./plasmoid/package \
+            && zip -rq "$_abs_pkg_dir/usr/share/dictee/dictee.plasmoid" \
+                       metadata.json contents/)
+    fi
 }

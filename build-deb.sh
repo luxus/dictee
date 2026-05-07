@@ -3,7 +3,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-VERSION="1.3.2"
+VERSION="1.3.3"
 PKG_DIR="pkg/dictee"
 
 # Final artefacts go in .dev/dist/ (gitignored), keeping the repo root clean.
@@ -63,27 +63,18 @@ build_dotool() {
 
 build_dotool
 
-# Build plasmoid
-build_plasmoid() {
-    echo "=== Building dictee.plasmoid ==="
-    local PLASMOID_SRC="plasmoid/package"
-    if [ ! -d "$PLASMOID_SRC" ]; then
-        echo "Plasmoid source not found, skipping"
-        return
+# Plasmoid: now built by dict_prepare_pkg_dir (build-common.sh) so all
+# builders (deb / rpm / tar) embed the same just-built artifact. We just
+# expose a copy in $DIST_DIR/ for upload-as-release-asset convenience.
+expose_plasmoid_in_dist() {
+    if [ -f "$PKG_DIR/usr/share/dictee/dictee.plasmoid" ]; then
+        mkdir -p "$DIST_DIR"
+        cp "$PKG_DIR/usr/share/dictee/dictee.plasmoid" "$DIST_DIR/dictee.plasmoid"
+        echo "Plasmoid exposed in $DIST_DIR/"
     fi
-    # Regenerate Defaults.js from config/main.xml (source of truth for kcfg
-    # defaults, used by the "Reset icon settings" button).
-    if [ -x plasmoid/gen-defaults.py ]; then
-        python3 plasmoid/gen-defaults.py
-    fi
-    (cd "$PLASMOID_SRC" && zip -r "../../$DIST_DIR/dictee.plasmoid" metadata.json contents/)
-    mkdir -p "$PKG_DIR/usr/share/dictee"
-    cp "$DIST_DIR/dictee.plasmoid" "$PKG_DIR/usr/share/dictee/"
-    echo "Plasmoid built and staged"
-    echo ""
 }
 
-build_plasmoid
+expose_plasmoid_in_dist
 
 # Build CUDA version
 build_cuda() {
@@ -102,7 +93,7 @@ build_cuda() {
     # Update control file for CUDA
     cat > "$PKG_DIR/DEBIAN/control" << 'EOF'
 Package: dictee-cuda
-Version: 1.3.2
+Version: 1.3.3
 Section: sound
 Priority: optional
 Architecture: amd64
@@ -231,7 +222,7 @@ build_cpu() {
     # Update control file for CPU
     cat > "$PKG_DIR/DEBIAN/control" << 'EOF'
 Package: dictee-cpu
-Version: 1.3.2
+Version: 1.3.3
 Section: sound
 Priority: optional
 Architecture: amd64
