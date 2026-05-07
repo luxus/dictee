@@ -3,6 +3,28 @@
 # for CUDA runtime libs), symlinks the NVIDIA .so files into /usr/lib/dictee/
 # so ldconfig + ORT_DYLIB_PATH pick them up, and runs ldconfig.
 
+_setup_user_groups() {
+    # Add logged-in users to the 'input' group (dotool / dictee-ptt
+    # need /dev/uinput access) and 'docker' group when docker is
+    # available (LibreTranslate runs in Docker). Mirrors postinst .deb
+    # and %post .rpm so an Arch user gets the same default behaviour
+    # as Debian/Ubuntu/Fedora installs.
+    for uid in $(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $2}' | sort -u); do
+        user=$(id -nu "$uid" 2>/dev/null) || continue
+        [ "$user" = "root" ] && continue
+        if ! id -nG "$user" | grep -qw input; then
+            usermod -aG input "$user"
+            echo "✓ $user added to group 'input' (dotool / PTT)"
+        fi
+        if command -v docker >/dev/null 2>&1; then
+            if ! id -nG "$user" | grep -qw docker; then
+                usermod -aG docker "$user"
+                echo "✓ $user added to group 'docker' (LibreTranslate)"
+            fi
+        fi
+    done
+}
+
 _install_postprocess_venv() {
     PP_VENV="/usr/share/dictee/postprocess-env"
     if command -v python3 >/dev/null 2>&1; then
@@ -76,6 +98,7 @@ post_install() {
     # /etc/modules-load.d/dictee-uinput.conf handles subsequent boots.
     modprobe uinput 2>/dev/null || true
 
+    _setup_user_groups
     _install_postprocess_venv
     _install_cuda_venv
 }
@@ -83,6 +106,7 @@ post_install() {
 post_upgrade() {
     modprobe uinput 2>/dev/null || true
 
+    _setup_user_groups
     _upgrade_postprocess_venv
     _install_cuda_venv
 }

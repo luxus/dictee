@@ -1,7 +1,32 @@
+_setup_user_groups() {
+    # Add logged-in users to the 'input' group (dotool / dictee-ptt
+    # need /dev/uinput access) and 'docker' group when docker is
+    # available (LibreTranslate runs in Docker). Mirrors postinst .deb
+    # and %post .rpm so an Arch user gets the same default behaviour
+    # as Debian/Ubuntu/Fedora installs — without it, PTT shortcut and
+    # LibreTranslate stay broken until the user runs usermod manually.
+    for uid in $(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $2}' | sort -u); do
+        user=$(id -nu "$uid" 2>/dev/null) || continue
+        [ "$user" = "root" ] && continue
+        if ! id -nG "$user" | grep -qw input; then
+            usermod -aG input "$user"
+            echo "✓ $user added to group 'input' (dotool / PTT)"
+        fi
+        if command -v docker >/dev/null 2>&1; then
+            if ! id -nG "$user" | grep -qw docker; then
+                usermod -aG docker "$user"
+                echo "✓ $user added to group 'docker' (LibreTranslate)"
+            fi
+        fi
+    done
+}
+
 post_install() {
     # Load uinput now so dotool & dictee-ptt work without a reboot.
     # /etc/modules-load.d/dictee-uinput.conf handles subsequent boots.
     modprobe uinput 2>/dev/null || true
+
+    _setup_user_groups
 
     # Create Python venv for text2num (number conversion)
     PP_VENV="/usr/share/dictee/postprocess-env"
@@ -18,6 +43,8 @@ post_install() {
 
 post_upgrade() {
     modprobe uinput 2>/dev/null || true
+
+    _setup_user_groups
 
     PP_VENV="/usr/share/dictee/postprocess-env"
     if [ -d "$PP_VENV" ] && command -v python3 >/dev/null 2>&1; then
