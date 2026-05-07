@@ -23,7 +23,7 @@
   <a href="https://github.com/rcspam/dictee/wiki"><img src="https://img.shields.io/badge/docs-wiki-blue" alt="Wiki"></a>
 </p>
 
-> 🎉 **v1.3.2 stable — mai 2026.** Changements majeurs depuis la v1.2 :
+> 🎉 **v1.3.3 stable — mai 2026.** Changements majeurs depuis la v1.2 :
 >
 > - **`dictee-transcribe`** — nouvelle fenêtre dédiée pour la transcription hors-ligne de fichiers audio/vidéo. Lecteur synchronisé sur la timeline, multi-onglets, traduction et analyse LLM par onglet, export en PDF / SRT / JSON / Markdown.
 > - **Diarisation des locuteurs** jusqu'à 4 locuteurs via NVIDIA Sortformer, plus un pipeline découpé qui lève la limite VRAM sur les fichiers longs (keynote de 54 min diarisée en 122 s).
@@ -31,7 +31,7 @@
 > - **Backend ASR Canary-1B v2** (NVIDIA AED) avec **traduction native** sur 12 paires intra-modèle — plus besoin de service externe.
 > - **Libs CUDA portables** via venv pip au postinst — plus besoin du dépôt NVIDIA.
 >
-> Correctifs v1.3.2 : réinstallation propre avec configuration préservée (auto-reset, prompt d'uninstall corrigé), le bouton Dictation du plasmoïde rend le focus à l'éditeur, raccourci cheatsheet géré par `dictee-ptt` (marche sur KDE **et** GNOME, plus de collision `Ctrl+Alt+Fn` avec les TTY virtuels), bandeau first-run i18n en 7 langues avec le raccourci réellement configuré. → [Release](https://github.com/rcspam/dictee/releases/tag/v1.3.2) · [Changelog](https://github.com/rcspam/dictee/wiki/fr-Changelog)
+> Correctifs v1.3.3 : cohérence du packaging cross-distro — les hooks `.install` Arch ajoutent désormais les groupes `input`/`docker` à l'installation (postinst .deb / %post .rpm le faisaient déjà), `python-evdev` est promu en dépendance dure sur Arch (était `optdepends` → cassait silencieusement le PTT), le plasmoïde wrappe `docker inspect` via `sg docker` pour que l'indicateur LT reste juste quand plasmashell n'a pas encore rafraîchi son set de groupes, la règle udev est shippée directement en mode `0660` (était `0620` puis sed au postinst), le venv post-traitement (`text2num`) est désormais créé aussi en mode tarball, le script dictee wrappe `dotool` via `sg input` quand il est lancé depuis un parent shell sans le groupe (bouton Dictate plasmoïde qui tape dans la fenêtre active). Clôture aussi les issues [#5](https://github.com/rcspam/dictee/issues/5) (faux positif NVIDIA) et [#6](https://github.com/rcspam/dictee/issues/6) (persistance du toggle PP-traduction + combo de langue LibreTranslate). → [Release](https://github.com/rcspam/dictee/releases/tag/v1.3.3) · [Changelog](https://github.com/rcspam/dictee/wiki/fr-Changelog)
 >
 > 📚 Le [**wiki dictée**](https://github.com/rcspam/dictee/wiki/fr-Home) complet est en ligne — 24 pages couvrant l'installation, la configuration, les 4 backends ASR (avec deep-dives Parakeet-TDT et Canary-1B), le post-traitement, la diarisation, le dépannage et le guide développeur. Disponible en 🇫🇷 français et 🇬🇧 anglais.
 
@@ -220,7 +220,7 @@ curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | b
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --gpu
 
 # Épingler une version précise
-curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.2
+curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.3
 
 # Non interactif
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --non-interactive
@@ -233,22 +233,22 @@ Téléchargez depuis [Releases](../../releases).
 **Ubuntu / Debian (CPU) :**
 
 ```bash
-sudo apt install ./dictee-cpu_1.3.2_amd64.deb
+sudo apt install ./dictee-cpu_1.3.3_amd64.deb
 ```
 
 **Ubuntu / Debian (GPU) :** nécessite le dépôt APT CUDA NVIDIA — voir [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup) pour la configuration unique, puis :
 
 ```bash
-sudo apt install ./dictee-cuda_1.3.2_amd64.deb
+sudo apt install ./dictee-cuda_1.3.3_amd64.deb
 ```
 
 **Fedora / openSUSE (CPU) :**
 
 ```bash
-sudo dnf install ./dictee-cpu-1.3.2-1.x86_64.rpm
+sudo dnf install ./dictee-cpu-1.3.3-1.x86_64.rpm
 ```
 
-**Fedora / openSUSE (GPU) :** ajoutez d'abord le dépôt CUDA (voir [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), puis `dictee-cuda-1.3.2-1.x86_64.rpm`.
+**Fedora / openSUSE (GPU) :** ajoutez d'abord le dépôt CUDA (voir [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), puis `dictee-cuda-1.3.3-1.x86_64.rpm`.
 
 **Arch Linux (AUR) :** `PKGBUILD` à la racine du dépôt (x86_64 + aarch64). Clonez + `makepkg -si`.
 
@@ -257,8 +257,8 @@ sudo dnf install ./dictee-cpu-1.3.2-1.x86_64.rpm
 **Autres distros (tarball) :**
 
 ```bash
-tar xzf dictee-1.3.2_amd64.tar.gz
-cd dictee-1.3.2
+tar xzf dictee-1.3.3_amd64.tar.gz
+cd dictee-1.3.3
 sudo ./install.sh
 ```
 
@@ -379,7 +379,9 @@ Pour les rapports de bugs et contournements, voir [Troubleshooting](https://gith
 
 ## Feuille de route
 
-**v1.3.2 (actuelle)** — **Fallback automatique CUDA → CPU au runtime** : le paquet CUDA sonde désormais `/proc/driver/nvidia/gpus/` au démarrage et bascule en CPU automatiquement sur les machines sans driver NVIDIA fonctionnel (VM virtio, conteneurs headless, postes avec driver désinstallé), au lieu de crasher en boucle de redémarrage. Le check « ASR service » de l'assistant de configuration est maintenant strict (état actif + socket ouverte), il ne peut plus afficher « Tout est prêt ! » tant que le daemon n'est pas vraiment up. Nouvelle variable d'override `DICTEE_FORCE_CPU=1`.
+**v1.3.3 (actuelle)** — **Cohérence du packaging cross-distro**. Les hooks `.install` Arch ajoutent désormais les groupes `input`/`docker` à l'installation (postinst .deb / %post .rpm le faisaient déjà — PTT et LT cassés silencieusement sur fresh install Arch sans ça). `python-evdev` promu en dépendance dure sur Arch (était `optdepends` → fallback en mode raw cassé). Le plasmoïde wrappe `docker inspect` via `sg docker` pour que l'indicateur LT reste juste quand plasmashell n'a pas encore rafraîchi son set de groupes. Règle udev shippée directement en mode `0660`. Venv post-traitement (`text2num`) créé aussi en mode tarball. Le script dictee wrappe `dotool` via `sg input` quand lancé depuis un parent shell aux groupes périmés (bouton Dictate plasmoïde qui tape dans la fenêtre active). Clôture les issues [#5](https://github.com/rcspam/dictee/issues/5) et [#6](https://github.com/rcspam/dictee/issues/6).
+
+**v1.3.2** — **Fallback automatique CUDA → CPU au runtime** : le paquet CUDA sonde désormais `/proc/driver/nvidia/gpus/` au démarrage et bascule en CPU automatiquement sur les machines sans driver NVIDIA fonctionnel (VM virtio, conteneurs headless, postes avec driver désinstallé), au lieu de crasher en boucle de redémarrage. Le check « ASR service » de l'assistant de configuration est maintenant strict (état actif + socket ouverte), il ne peut plus afficher « Tout est prêt ! » tant que le daemon n'est pas vraiment up. Nouvelle variable d'override `DICTEE_FORCE_CPU=1`.
 
 **v1.3.0** — Exceptions keepcaps short-text (7 langues), mode de correspondance étendu, purge des modèles LibreTranslate, corrections continuation + traduction, dictée des numéros de version, sûreté multi-utilisateur (suffixe UID sur les fichiers d'état), toggles cross-process du plasmoid (LLM / Short / Meeting), 682 tests postprocess + 148 tests pipeline, bannière theme-aware.
 
