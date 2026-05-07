@@ -522,6 +522,28 @@ mode_online() {
         sudo pacman -S --needed --noconfirm translate-shell \
             || warn "Failed to install translate-shell — Google/Bing translation will be unavailable"
 
+        # Docker is needed only for LibreTranslate (offline self-hosted translation).
+        # Other backends (Google, Bing, Ollama) work without it. .deb/.rpm install
+        # docker via Recommends (docker.io / moby-engine), but pacman has no
+        # equivalent — prompt the user (~250 MB). If they skip now, the setup
+        # wizard will surface a "Setup Docker" button later in the LT page.
+        if ! command -v docker >/dev/null 2>&1; then
+            local install_docker="n"
+            if [[ $NON_INTERACTIVE -eq 1 ]]; then
+                info "Docker not installed — skipping (non-interactive). Install later if you want LibreTranslate."
+            elif [[ -r /dev/tty ]]; then
+                echo
+                echo "Docker is needed for LibreTranslate (offline self-hosted translation, ~250 MB)."
+                echo "Other translation backends (Google, Bing, Ollama) work without it."
+                read -rp "Install Docker now? [y/N] " install_docker < /dev/tty || install_docker="n"
+            fi
+            if [[ "$install_docker" =~ ^[Yy] ]]; then
+                info "Installing docker..."
+                sudo pacman -S --needed --noconfirm docker \
+                    || warn "Failed to install docker — LibreTranslate will be unavailable"
+            fi
+        fi
+
         info "Cloning the dictee repository (master)..."
         # Always clone master for Arch: PKGBUILD packaging fixes (orphan
         # cleanup, dependency tweaks, .install hooks) must ship without a
