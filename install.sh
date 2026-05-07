@@ -616,6 +616,40 @@ mode_tarball() {
 
     info "Installing dictee from tarball at ${SCRIPT_DIR}"
 
+    # --- Dependencies notice (tarball ships binaries only) ---
+    # The .deb / .rpm / Arch packages declare their distro deps in the
+    # package metadata (Depends/Requires/depends), so apt/dnf/pacman
+    # install them before the postinst runs. The tarball is for distros
+    # without an official package — there's no metadata, no automatic
+    # install, and we can't safely guess the right command across
+    # Slackware / Gentoo / Void / NixOS / etc.
+    #
+    # We just print the list. If something is missing, dictee-setup will
+    # die with `ImportError: No module named PyQt6` (or similar) and the
+    # user has at least seen this message.
+    cat <<EOF
+
+${C_YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_OFF}
+${C_BOLD}REQUIRED SYSTEM DEPENDENCIES${C_OFF}
+
+The tarball ships binaries only — install these via your distro's
+package manager BEFORE running dictee-setup (names vary by distro):
+
+  • python3 (≥3.10), python3-pip, python3-venv
+  • python3-evdev, python3-pyqt6 (+ qtmultimedia + qtsvg), python3-numpy
+  • pulseaudio-utils, pipewire (or alsa-utils), libnotify(-bin), sox
+  • wl-clipboard (Wayland), xclip (X11)
+  • translate-shell, curl
+
+Debian-like example:
+  sudo apt install python3 python3-pip python3-venv python3-evdev \\
+      python3-pyqt6 python3-pyqt6.qtmultimedia python3-pyqt6.qtsvg \\
+      python3-numpy pulseaudio-utils pipewire libnotify-bin sox \\
+      wl-clipboard xclip translate-shell curl
+${C_YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_OFF}
+
+EOF
+
     # --- Binaries ---
     info "Installing binaries into $PREFIX/bin/"
     local bins=(
@@ -731,9 +765,14 @@ mode_tarball() {
     udevadm trigger /dev/uinput 2>/dev/null || true
 
     # --- input group (dotool needs /dev/uinput) ---
+    # No reboot needed: dictee-ptt.service runs the daemon under
+    # `sg input -c …` so the new group is effective immediately.
+    # GUI apps started before the install (terminals, file managers)
+    # won't see the group until the next login, but dictee itself
+    # runs through dictee-ptt → sg input → /dev/uinput → fine.
     if ! id -nG "$REAL_USER" | grep -qw input; then
         usermod -aG input "$REAL_USER"
-        ok "$REAL_USER added to group 'input' — reboot required to activate"
+        ok "$REAL_USER added to group 'input' (active immediately via dictee-ptt's sg wrapper)"
     fi
 
     # --- docker group (LibreTranslate runs in Docker) ---

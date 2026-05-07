@@ -262,6 +262,22 @@ cd dictee-1.3.2
 sudo ./install.sh
 ```
 
+The tarball ships **binaries only** — system dependencies must be installed beforehand via your distro's package manager. Names vary by distro; pick the equivalents in yours:
+
+- `python3` (≥3.10), `python3-pip`, `python3-venv`
+- `python3-evdev`, `python3-pyqt6` (+ `qtmultimedia` + `qtsvg`), `python3-numpy`
+- `pulseaudio-utils`, `pipewire` (or `alsa-utils`), `libnotify(-bin)`, `sox`
+- `wl-clipboard` (Wayland), `xclip` (X11)
+- `translate-shell`, `curl`
+
+Example for Debian-derived distros (Mint, MX, Pop!_OS…):
+```bash
+sudo apt install python3 python3-pip python3-venv python3-evdev \
+    python3-pyqt6 python3-pyqt6.qtmultimedia python3-pyqt6.qtsvg python3-numpy \
+    pulseaudio-utils pipewire libnotify-bin sox wl-clipboard xclip \
+    translate-shell curl
+```
+
 **From source:** `cargo build --release --features sortformer` then `sudo ./install.sh`. See [Developer-Guide](https://github.com/rcspam/dictee/wiki/Developer-Guide) for full Cargo features and package build scripts.
 
 ---
