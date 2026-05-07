@@ -27,12 +27,12 @@ depends=(
     'libnotify'
     'libpulse'
     'python-pyqt6'
+    'python-evdev'
     'qt6-multimedia'
     'qt6-svg'
     'sox'
 )
 optdepends=(
-    'python-evdev: dictee-ptt key grab (recommended)'
     'wl-clipboard: clipboard copy (Wayland)'
     'xclip: clipboard copy (X11)'
     'curl: LibreTranslate translation'
