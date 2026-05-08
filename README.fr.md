@@ -23,17 +23,23 @@
   <a href="https://github.com/rcspam/dictee/wiki"><img src="https://img.shields.io/badge/docs-wiki-blue" alt="Wiki"></a>
 </p>
 
-> 🎉 **v1.3.3 stable — mai 2026.** Changements majeurs depuis la v1.2 :
+> 🎉 **v1.3.3 stable — mai 2026** — [Notes de version](https://github.com/rcspam/dictee/releases/tag/v1.3.3) · [Changelog](https://github.com/rcspam/dictee/wiki/fr-Changelog)
 >
-> - **`dictee-transcribe`** — nouvelle fenêtre dédiée pour la transcription hors-ligne de fichiers audio/vidéo. Lecteur synchronisé sur la timeline, multi-onglets, traduction et analyse LLM par onglet, export en PDF / SRT / JSON / Markdown.
+> Changements majeurs depuis la v1.2 :
+>
+> - **`dictee-transcribe`** — fenêtre dédiée pour la transcription hors-ligne de fichiers audio/vidéo. Lecteur synchronisé sur la timeline, multi-onglets, traduction et analyse LLM par onglet, export en PDF / SRT / JSON / Markdown.
 > - **Diarisation des locuteurs** jusqu'à 4 locuteurs via NVIDIA Sortformer, plus un pipeline découpé qui lève la limite VRAM sur les fichiers longs (keynote de 54 min diarisée en 122 s).
 > - **Analyse LLM** sur les transcriptions diarisées — synthèse, chapitrage, correction ASR ; 14 providers configurables côte à côte (Ollama, OpenAI, Claude, Gemini, Mistral, DeepSeek, Groq, Cerebras, OpenRouter…).
-> - **Backend ASR Canary-1B v2** (NVIDIA AED) avec **traduction native** sur 12 paires intra-modèle — plus besoin de service externe.
+> - **Backend ASR Canary-1B v2** avec traduction native (25 ↔ EN, 48 paires).
 > - **Libs CUDA portables** via venv pip au postinst — plus besoin du dépôt NVIDIA.
 >
-> Correctifs v1.3.3 : cohérence du packaging cross-distro — les hooks `.install` Arch ajoutent désormais les groupes `input`/`docker` à l'installation (postinst .deb / %post .rpm le faisaient déjà), `python-evdev` est promu en dépendance dure sur Arch (était `optdepends` → cassait silencieusement le PTT), le plasmoïde wrappe `docker inspect` via `sg docker` pour que l'indicateur LT reste juste quand plasmashell n'a pas encore rafraîchi son set de groupes, la règle udev est shippée directement en mode `0660` (était `0620` puis sed au postinst), le venv post-traitement (`text2num`) est désormais créé aussi en mode tarball, le script dictee wrappe `dotool` via `sg input` quand il est lancé depuis un parent shell sans le groupe (bouton Dictate plasmoïde qui tape dans la fenêtre active). Clôture aussi les issues [#5](https://github.com/rcspam/dictee/issues/5) (faux positif NVIDIA) et [#6](https://github.com/rcspam/dictee/issues/6) (persistance du toggle PP-traduction + combo de langue LibreTranslate). → [Release](https://github.com/rcspam/dictee/releases/tag/v1.3.3) · [Changelog](https://github.com/rcspam/dictee/wiki/fr-Changelog)
->
 > 📚 Le [**wiki dictée**](https://github.com/rcspam/dictee/wiki/fr-Home) complet est en ligne — 24 pages couvrant l'installation, la configuration, les 4 backends ASR (avec deep-dives Parakeet-TDT et Canary-1B), le post-traitement, la diarisation, le dépannage et le guide développeur. Disponible en 🇫🇷 français et 🇬🇧 anglais.
+>
+> <details><summary><i>Correctifs v1.3.3 — cohérence du packaging cross-distro</i></summary>
+>
+> Les hooks `.install` Arch ajoutent désormais les groupes `input`/`docker` à l'installation (postinst .deb / %post .rpm le faisaient déjà), `python-evdev` est promu en dépendance dure sur Arch (était `optdepends` → cassait silencieusement le PTT), le plasmoïde wrappe `docker inspect` via `sg docker` pour que l'indicateur LT reste juste quand plasmashell n'a pas encore rafraîchi son set de groupes, la règle udev est shippée directement en mode `0660` (était `0620` puis sed au postinst), le venv post-traitement (`text2num`) est désormais créé aussi en mode tarball, le script dictee wrappe `dotool` via `sg input` quand il est lancé depuis un parent shell sans le groupe. Clôture aussi les issues [#5](https://github.com/rcspam/dictee/issues/5) (faux positif NVIDIA) et [#6](https://github.com/rcspam/dictee/issues/6) (persistance du toggle PP-traduction + combo de langue LibreTranslate).
+>
+> </details>
 
 <p align="center">
   <img src="assets/demo-dictee-1.3.2.gif" alt="dictée — démo push-to-talk : appuyez F8, parlez, le texte apparaît au curseur" width="900">
@@ -45,6 +51,7 @@
 
 <p align="center">
   <a href="#quest-ce-que-dictée-">Qu'est-ce que dictée ?</a> &bull;
+  <a href="#configuration-matérielle-requise">Configuration matérielle</a> &bull;
   <a href="#démarrage-rapide">Démarrage rapide</a> &bull;
   <a href="#fonctionnalités">Fonctionnalités</a> &bull;
   <a href="#installation">Installation</a> &bull;
@@ -68,6 +75,21 @@ La transcription est effectuée **100 % localement** par défaut : aucun audio n
 - 🌍 **25+ langues** — avec ponctuation et capitalisation natives (Parakeet-TDT)
 - 🔀 **4 backends ASR** — changez instantanément selon la langue, la latence et le matériel
 - 🎨 **Retour visuel** — widget KDE Plasma, icône systray, ou animation plein écran
+
+---
+
+## Configuration matérielle requise
+
+| Backend | RAM mini | CPU mode | GPU | Disque |
+|---------|----------|----------|-----|--------|
+| **Parakeet-TDT** *(par défaut)* | 4 Go | ✅ ~0,8 s par énoncé (CPU récent) | NVIDIA 4 Go+ VRAM (~5× plus rapide) | 3 Go |
+| **Canary-1B v2** | 6 Go | ❌ non supporté (encodeur trop lourd) | **NVIDIA 6 Go+ VRAM requis** | 6 Go |
+| **faster-whisper** | 4 Go | ✅ acceptable (`turbo` / `small`) | NVIDIA 4 Go+ VRAM (`large-v3`) | 3 Go |
+| **Vosk** | 2 Go | ✅ par design | — | 50 Mo |
+
+**Distributions testées** : Ubuntu 22.04 / 24.04 · Debian 12 · Fedora 40 / 44 · openSUSE Tumbleweed · Arch Linux · KDE Neon.
+
+**Environnements de bureau** : KDE Plasma 6 *(intégration complète via plasmoid natif)* · GNOME, Xfce, Cinnamon *(systray uniquement — GNOME requiert l'[extension AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/))*.
 
 ---
 
@@ -113,6 +135,22 @@ Pour les chemins d'installation détaillés (`.deb`/`.rpm` manuels, prérequis G
 | **Vosk** | 20+ | ~50 Mo | ~1,5s | Léger, strictement hors ligne |
 
 Chaque backend tourne comme service systemd utilisateur avec le même protocole socket Unix — le changement est transparent. → [Wiki ASR-Backends](https://github.com/rcspam/dictee/wiki/ASR-Backends)
+
+### Précision des modèles
+
+dictée utilise **Parakeet-TDT 0.6B v3** par défaut. Sur l'[Open ASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), il devance Whisper-large-v3 sur le multilingue tout en étant nettement plus petit et plus rapide :
+
+| Modèle | Taille | WER anglais | FLEURS multilingue (moy.) | Vitesse relative |
+|--------|--------|-------------|---------------------------|------------------|
+| **Parakeet-TDT 0.6B v3** *(défaut dictée)* | 600M | ~6,5 % | **12,0 %** | ~10× Whisper-large-v3 |
+| Whisper-large-v3 | 1,55B | 7,4 % | 12,6 % | référence |
+| Canary-1B v2 *(également fourni)* | 1B | 7,2 % | – | ~5× Whisper-large-v3 |
+| Whisper-large-v3-turbo | 809M | ~7,8 % | – | ~3-4× |
+| Vosk *(fallback CPU)* | 50 Mo | ~12-18 % | – | – |
+
+Parakeet-TDT v3 est particulièrement bon sur le **français**, le grec, l'estonien et le maltais. Pour une couverture maximale (99 langues), basculer sur faster-whisper ; pour la traduction intégrée, sur Canary-1B.
+
+> Sources : [NVIDIA Parakeet-TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) · [Open ASR Leaderboard 2025](https://huggingface.co/blog/open-asr-leaderboard).
 
 ### 5 backends de traduction
 
