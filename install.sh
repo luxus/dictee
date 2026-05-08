@@ -64,13 +64,13 @@ auto_reset_services() {
         conf_path="$(eval echo "~$target_user")/.config/dictee.conf"
         [[ -f "$conf_path" ]] || return 0
         uid=$(id -u "$target_user" 2>/dev/null) || return 0
-        info "Configuration existante détectée — restart de dictee-ptt..."
+        info "Existing configuration detected — restarting dictee-ptt..."
         sudo -u "$target_user" XDG_RUNTIME_DIR="/run/user/${uid}" \
             systemctl --user restart dictee-ptt 2>/dev/null || true
     else
         conf_path="$HOME/.config/dictee.conf"
         [[ -f "$conf_path" ]] || return 0
-        info "Configuration existante détectée — restart de dictee-ptt..."
+        info "Existing configuration detected — restarting dictee-ptt..."
         systemctl --user restart dictee-ptt 2>/dev/null || true
     fi
 }

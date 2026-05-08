@@ -22,20 +22,20 @@ source ./build-common.sh
 # Shared with build-deb.sh / build-tar.sh — single source of truth.
 dict_prepare_pkg_dir
 
-# Vérifier rpmbuild
+# Check rpmbuild
 if ! command -v rpmbuild >/dev/null 2>&1; then
-    echo "rpmbuild non trouvé. Installer avec :"
+    echo "rpmbuild not found. Install with:"
     echo "  sudo dnf install rpm-build"
-    echo "  # ou"
+    echo "  # or"
     echo "  sudo apt install rpm"
     exit 1
 fi
 
-# Vérifier que les binaires existent (compilés par build-deb.sh)
+# Check that binaries exist (compiled by build-deb.sh)
 if [ ! -f "target/release/transcribe" ]; then
-    echo "Binaires non trouvés. Lancez d'abord :"
+    echo "Binaries not found. Run first:"
     echo "  ./build-deb.sh"
-    echo "  # ou"
+    echo "  # or"
     echo "  cargo build --release --features sortformer"
     exit 1
 fi
@@ -185,7 +185,7 @@ build_rpm_cuda() {
     # `nm | grep cuda` check was a false-positive — CPU builds also
     # carry the string "cuda" in their symbol table — and silently
     # shipped CPU binaries in the CUDA RPM (incident 2026-05-02).
-    echo "Recompilation CUDA (forcée)..."
+    echo "CUDA rebuild (forced)..."
     # CRITICAL: --no-default-features disables ort-defaults (static linking)
     # load-dynamic enables runtime loading of libonnxruntime.so for CUDA
     cargo build --release --no-default-features --features "cuda,sortformer,load-dynamic" \
@@ -422,9 +422,9 @@ fi
 # fallback (v1.3.1) picks CPU automatically.
 if [ ! -d /proc/driver/nvidia ] && [ ! -e /dev/nvidia0 ]; then
     if [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ]; then
-        echo "→ Pas de GPU NVIDIA détecté — skip téléchargement des libs CUDA (≈ 1,5 Go)."
-        echo "  Le runtime bascule automatiquement en CPU (fallback v1.3.1)."
-        echo "  Pour activer CUDA après installation d'un driver NVIDIA :"
+        echo "→ No NVIDIA GPU detected — skipping CUDA libraries download (~1.5 GB)."
+        echo "  The runtime falls back to CPU automatically (v1.3.1 fallback)."
+        echo "  To enable CUDA later after installing an NVIDIA driver:"
         echo "    sudo python3 -m venv /opt/dictee/cuda-venv"
         echo "    sudo /opt/dictee/cuda-venv/bin/pip install nvidia-cuda-runtime-cu12 \\\\"
         echo "         nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 \\\\"
@@ -440,8 +440,8 @@ elif [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \\
         "\$CUDA_VENV/bin/pip" install --quiet --upgrade pip 2>/dev/null || true
     fi
     if [ -x "\$CUDA_VENV/bin/pip" ]; then
-        echo "→ Téléchargement des libs NVIDIA CUDA (≈ 1,5 Go, peut prendre plusieurs minutes)..."
-        echo "  pip affichera la progression de chaque paquet ; ne pas interrompre."
+        echo "→ Downloading NVIDIA CUDA libraries (~1.5 GB, may take several minutes)..."
+        echo "  pip will show per-package progress; do not interrupt."
         if "\$CUDA_VENV/bin/pip" install --upgrade \\
                 nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 \\
                 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12 2>/dev/null; then
@@ -455,11 +455,11 @@ elif [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \\
                     done
                 done
                 ldconfig 2>/dev/null || true
-                echo "✓ Libs NVIDIA CUDA liées dans /usr/lib/dictee/"
+                echo "✓ NVIDIA CUDA libraries linked into /usr/lib/dictee/"
             fi
         else
-            echo "⚠ pip install nvidia-*-cu12 a échoué (pas d'internet ?)"
-            echo "  Relancer : sudo \$CUDA_VENV/bin/pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12 && sudo ldconfig"
+            echo "⚠ pip install nvidia-*-cu12 failed (no internet?)"
+            echo "  Re-run: sudo \$CUDA_VENV/bin/pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12 && sudo ldconfig"
         fi
     fi
 fi
