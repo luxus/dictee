@@ -23,24 +23,6 @@
   <a href="https://github.com/rcspam/dictee/wiki"><img src="https://img.shields.io/badge/docs-wiki-blue" alt="Wiki"></a>
 </p>
 
-> 🎉 **v1.3.3 stable — May 2026** — [Release notes](https://github.com/rcspam/dictee/releases/tag/v1.3.3) · [Changelog](https://github.com/rcspam/dictee/wiki/Changelog)
->
-> Major changes since v1.2:
->
-> - **`dictee-transcribe`** — dedicated window for offline transcription of audio/video files. Timeline player synced with text, multi-tab, per-tab translation and LLM analysis, export to PDF / SRT / JSON / Markdown.
-> - **Speaker diarization** up to 4 speakers via NVIDIA Sortformer, plus a chunked pipeline that lifts the VRAM cap on long files (54-min keynote diarized in 122 s).
-> - **LLM analysis** on diarized transcripts — synthesis, chapters, ASR cleanup; 14 providers configurable side by side (Ollama, OpenAI, Claude, Gemini, Mistral, DeepSeek, Groq, Cerebras, OpenRouter…).
-> - **Canary-1B v2** ASR backend with built-in translation (25 ↔ EN, 48 pairs).
-> - **Portable CUDA libs** via pip venv at postinst — no NVIDIA repo required.
->
-> 📚 The full [**dictee wiki**](https://github.com/rcspam/dictee/wiki) is online — 24 pages covering installation, configuration, all 4 ASR backends (with Parakeet-TDT and Canary-1B deep-dives), post-processing, diarization, troubleshooting, and developer guide. Available in 🇬🇧 English and 🇫🇷 French.
->
-> <details><summary><i>v1.3.3 patch fixes — cross-distro packaging consistency</i></summary>
->
-> Arch `.install` hooks now add `input`/`docker` groups at install time (postinst .deb / %post .rpm already did), `python-evdev` promoted to hard depends on Arch (was optdepends → silently broke PTT), plasmoid wraps `docker inspect` in `sg docker` so the LT indicator stays accurate when plasmashell's group set hasn't refreshed yet, udev rule shipped directly in mode `0660` (was `0620` then sed'd at postinst), postprocess venv (`text2num`) now created in tarball install too, dictee script wraps `dotool` in `sg input` when invoked from a parent shell that lacks the group. Also closes [#5](https://github.com/rcspam/dictee/issues/5) (NVIDIA false positive) and [#6](https://github.com/rcspam/dictee/issues/6) (PP-translate toggle persistence + LibreTranslate language combo).
->
-> </details>
-
 <p align="center">
   <img src="assets/demo-dictee-1.3.2.gif" alt="dictee — push-to-talk demo: press F8, speak, text appears at the cursor" width="900">
 </p>
@@ -71,10 +53,15 @@
 
 Transcription is performed **100% locally** by default: no audio ever leaves your machine unless you explicitly choose a cloud translation backend.
 
-- 🔒 **100% local by default** — Parakeet, Canary, faster-whisper and Vosk all run offline on your hardware
-- 🌍 **25+ languages** — with native punctuation and capitalization (Parakeet-TDT)
-- 🔀 **4 ASR backends** — switch instantly depending on language, latency and hardware
-- 🎨 **Visual feedback** — KDE Plasma widget, system tray, or fullscreen animation
+---
+
+## Why dictee
+
+- **100% local processing by default** — no audio leaves the machine unless you explicitly enable a cloud translation backend. Frozen ONNX models, no training on your data.
+- **4 ASR backends to choose from** — Parakeet-TDT and Canary run as native Rust binaries (ONNX Runtime, low GPU latency), faster-whisper (99 languages) and Vosk (lightweight CPU) in Python. Transparent switching via Unix socket depending on language, latency or hardware. → [4 ASR backends](#4-asr-backends)
+- **5 translation backends to choose from** — from fully local (Canary, LibreTranslate, Ollama) to cloud (Google, Bing), with an explicit privacy table for each option. → [Translation backends](#5-translation-backends)
+- **No duration limit on audio files** — the chunked pipeline shipped in v1.3 (`dictee-transcribe`) diarizes a 54-min keynote in 122 s on an 8 GB GPU, where direct mel loading caps at 10-15 min. Ideal for meeting minutes and long interviews.
+- **Native Linux integration** — KDE Plasma 6 plasmoid + PyQt6 system tray (compatible with GNOME, XFCE, Sway via AppIndicator fallback). No other desktop dictation app offers this on Linux.
 
 ---
 
@@ -82,10 +69,10 @@ Transcription is performed **100% locally** by default: no audio ever leaves you
 
 | Backend | Min RAM | CPU mode | GPU | Disk |
 |---------|---------|----------|-----|------|
-| **Parakeet-TDT** *(default)* | 4 GB | ✅ ~0.8 s per utterance (recent CPU) | NVIDIA 4 GB+ VRAM (~5× faster) | 3 GB |
-| **Canary-1B v2** | 6 GB | ❌ not supported (encoder too heavy) | **NVIDIA 6 GB+ VRAM required** | 6 GB |
-| **faster-whisper** | 4 GB | ✅ acceptable (`turbo` / `small`) | NVIDIA 4 GB+ VRAM (`large-v3`) | 3 GB |
-| **Vosk** | 2 GB | ✅ by design | — | 50 MB |
+| **Parakeet-TDT** *(default)* | 4 GB | Yes — ~0.8 s per utterance (recent CPU) | NVIDIA 4 GB+ VRAM (~5× faster) | 3 GB |
+| **Canary-1B v2** | 6 GB | No — encoder too heavy | **NVIDIA 6 GB+ VRAM required** | 6 GB |
+| **faster-whisper** | 4 GB | Yes — `turbo` or `small` | NVIDIA 4 GB+ VRAM (`large-v3`) | 3 GB |
+| **Vosk** | 2 GB | Yes — by design | — | 50 MB |
 
 **Distributions tested**: Ubuntu 22.04 / 24.04 · Debian 12 · Fedora 40 / 44 · openSUSE Tumbleweed · Arch Linux · KDE Neon.
 
@@ -423,7 +410,7 @@ Configure via `dictee --setup` → **Post-processing** tab, or test rules live w
 
 ## Known limitations
 
-- **Diarization + Parakeet on 8 GB GPU** is capped around **10–15 min of audio**. Parakeet-TDT loads the full mel-spectrogram in one pass (~185 MB VRAM per minute), which overflows consumer GPUs past ~15 min. Workarounds: split the file, disable diarization, or use the CPU backend. Auto-chunking is planned for the v1.3 final release. → [Diarization wiki](https://github.com/rcspam/dictee/wiki/Diarization)
+- **Long-file diarization**: the chunked pipeline shipped in v1.3 (used by `dictee-transcribe`) lifts the VRAM cap (54-min keynote diarized in 122 s on 8 GB). In **continuous live dictation** (push-to-talk held without releasing), a single utterance > 10-15 min on an 8 GB GPU may still OOM — rare in practice, split the file or switch to the CPU backend. → [Diarization wiki](https://github.com/rcspam/dictee/wiki/Diarization)
 - **AMD / Intel GPUs** are not currently supported — dictee falls back to CPU.
 - **No real-time streaming** — Parakeet-TDT and Canary require the full utterance; only Nemotron (EN-only, via Rust binary) streams natively.
 
