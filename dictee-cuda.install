@@ -83,7 +83,8 @@ _install_cuda_venv() {
         "$CUDA_VENV/bin/pip" install --quiet --upgrade pip 2>/dev/null || true
     fi
     echo "→ Downloading NVIDIA CUDA libs (~1.5 GB, may take a few minutes)..."
-    if "$CUDA_VENV/bin/pip" install --quiet --upgrade \
+    echo "  pip will show per-package progress; do not interrupt."
+    if "$CUDA_VENV/bin/pip" install --upgrade \
             nvidia-cuda-runtime-cu12 \
             nvidia-cublas-cu12 \
             nvidia-cudnn-cu12 \

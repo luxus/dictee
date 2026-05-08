@@ -440,8 +440,9 @@ elif [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \\
         "\$CUDA_VENV/bin/pip" install --quiet --upgrade pip 2>/dev/null || true
     fi
     if [ -x "\$CUDA_VENV/bin/pip" ]; then
-        echo "→ Téléchargement des libs NVIDIA CUDA (≈ 1,5 Go)..."
-        if "\$CUDA_VENV/bin/pip" install --quiet --upgrade \\
+        echo "→ Téléchargement des libs NVIDIA CUDA (≈ 1,5 Go, peut prendre plusieurs minutes)..."
+        echo "  pip affichera la progression de chaque paquet ; ne pas interrompre."
+        if "\$CUDA_VENV/bin/pip" install --upgrade \\
                 nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 \\
                 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cuda-nvrtc-cu12 2>/dev/null; then
             _py_ver=\$(ls "\$CUDA_VENV/lib/" 2>/dev/null | grep -E "^python" | head -1)

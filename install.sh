@@ -553,6 +553,15 @@ mode_online() {
         git clone --depth 1 "https://github.com/${REPO}.git" dictee-src
         cd dictee-src
 
+        # Pre-build heads-up: makepkg compiles parakeet-rs (Rust+ONNX) from
+        # source, which is silent and slow. Without this warning, users
+        # routinely Ctrl-C around minute 4-5 thinking the install hung.
+        echo
+        warn "About to build dictee from source via makepkg."
+        warn "Compilation: ~5-10 min on a 4-core CPU, ~3 GB of disk in /tmp."
+        warn "Output will be terse — this is normal, please be patient."
+        echo
+
         info "Building via makepkg (this will compile from source)..."
         makepkg -si --noconfirm || die "makepkg failed"
     }

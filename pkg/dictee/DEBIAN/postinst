@@ -300,7 +300,8 @@ elif [ -f /usr/lib/dictee/libonnxruntime_providers_cuda.so ] \
     fi
     if [ -x "$CUDA_VENV/bin/pip" ]; then
         echo "→ Téléchargement des libs NVIDIA CUDA (≈ 1,5 Go, peut prendre plusieurs minutes)..."
-        if "$CUDA_VENV/bin/pip" install --quiet --upgrade \
+        echo "  pip affichera la progression de chaque paquet ; ne pas interrompre."
+        if "$CUDA_VENV/bin/pip" install --upgrade \
                 nvidia-cuda-runtime-cu12 \
                 nvidia-cublas-cu12 \
                 nvidia-cudnn-cu12 \

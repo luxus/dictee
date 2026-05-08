@@ -168,6 +168,27 @@ def read_conf_value(key, default=""):
     return default
 
 
+# Common evdev keycode → label mapping for the tray tooltip. DICTEE_PTT_KEY
+# stores raw evdev keycodes (e.g. 67 = F9). Covers F1-F24 + a few common keys;
+# unknown codes fall back to "key{kc}" rather than crash. Source: linux/input-event-codes.h.
+_PTT_KEY_LABELS = {
+    **{59 + i: f"F{i + 1}" for i in range(10)},      # F1..F10 = 59..68
+    87: "F11", 88: "F12",
+    **{183 + i: f"F{i + 13}" for i in range(12)},    # F13..F24 = 183..194
+    1: "Esc", 14: "BackSpace", 28: "Enter", 57: "Space",
+    103: "Up", 105: "Left", 106: "Right", 108: "Down",
+}
+
+
+def _ptt_label():
+    """Return human-readable label for the configured PTT key (e.g. 'F9')."""
+    raw = read_conf_value("DICTEE_PTT_KEY", "67")
+    try:
+        return _PTT_KEY_LABELS.get(int(raw), f"key{raw}")
+    except (ValueError, TypeError):
+        return str(raw) if raw else "F9"
+
+
 ASR_BACKENDS = [
     ("parakeet", "Parakeet"),
     ("canary", "Canary"),
@@ -908,7 +929,7 @@ class DicteeTrayQt:
 
         # Tray icon
         self.tray = QSystemTrayIcon(self._icons.get("offline", QIcon()), app)
-        self.tray.setToolTip(_("Dictation — offline"))
+        self.tray.setToolTip(_("Dictation — offline") + f" • {_ptt_label()}")
         self.tray.activated.connect(self._on_activated)
 
         # Menu contextuel
@@ -1206,13 +1227,14 @@ class DicteeTrayQt:
         icon = self._icons.get(self.state, self._icons["offline"])
         self.tray.setIcon(icon)
 
+        ptt = _ptt_label()
         tooltips = {
-            "idle": _("Dictation — ready") + "\n" + _("Click = dictation, Ctrl+click = translation"),
-            "offline": _("Dictation — offline"),
-            "diarize": _("Diarization ready") + "\n" + _("Use keyboard shortcut to record"),
+            "idle": _("Dictation — ready") + f" • {ptt}\n" + _("Click = dictation, Ctrl+click = translation"),
+            "offline": _("Dictation — offline") + f" • {ptt}",
+            "diarize": _("Diarization ready") + f" • {ptt}\n" + _("Use keyboard shortcut to record"),
             "diarizing": _("Diarization in progress…"),
             "preparing": _("Preparing diarization…"),
-            "diarize-ready": _("Ready for diarization"),
+            "diarize-ready": _("Ready for diarization") + f" • {ptt}",
             "recording": _("Dictation — recording") + "\n" + _("Click = stop, Middle = cancel"),
             "transcribing": _("Dictation — transcribing"),
         }
