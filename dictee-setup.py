@@ -6397,8 +6397,156 @@ class DicteeSetupDialog(QDialog):
         if logos_widget:
             lay.addWidget(logos_widget)
 
+        # Recommended setup card (QW7) — hardware detection + 1-click setup.
+        # Goal: an evaluator who wants to test fast can skip pages 1-6 and land
+        # directly on the test page with sensible defaults pre-filled. Pages
+        # remain accessible via "Next" for users who prefer manual config.
+        lay.addSpacing(16)
+        rec_card = self._build_recommended_setup_card()
+        if rec_card:
+            lay.addWidget(rec_card)
+
         lay.addStretch(1)
         self.stack.addWidget(page)
+
+    def _build_recommended_setup_card(self):
+        """Build the 'Recommended setup' card on the welcome page (QW7).
+
+        Detects hardware (GPU/RAM/desktop/lang), shows what was found, what
+        will be configured, and offers a single 'Use recommended setup' button
+        that pre-fills choices and jumps directly to the final test page.
+        """
+        ram_gb, gpu_name, gpu_total, _gpu_free = self._get_system_info()
+        lang_env = os.environ.get("LANG") or os.environ.get("LC_ALL") or ""
+        lang_code = (lang_env.split(".")[0].split("_")[0] if lang_env else "en").lower() or "en"
+        de_env = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+        is_kde = "kde" in de_env or "plasma" in de_env
+
+        backend = self._get_recommended_backend(ram_gb, gpu_total)
+        backend_label = {"parakeet": "Parakeet-TDT v3", "canary": "Canary 1B v2",
+                         "whisper": "faster-whisper", "vosk": "Vosk"}.get(backend, backend)
+        cuda_suffix = ""
+        if backend in ("parakeet", "canary", "whisper") and gpu_total >= 4:
+            cuda_suffix = " " + _("with CUDA")
+        elif backend in ("parakeet", "whisper"):
+            cuda_suffix = " " + _("(CPU mode)")
+
+        # Translation auto-enable: non-English system language + enough RAM + Docker
+        # present → suggest LibreTranslate (system_lang → EN, fully local). Otherwise off.
+        docker_ok = bool(shutil.which("docker"))
+        translate_auto = (lang_code != "en" and ram_gb >= 8 and docker_ok)
+
+        # Build detection description
+        det_lines = []
+        if gpu_total > 0:
+            det_lines.append("• " + _("NVIDIA GPU detected: {name} ({vram:.1f} GB VRAM)").format(
+                name=gpu_name or _("GPU"), vram=gpu_total))
+        else:
+            det_lines.append("• " + _("No NVIDIA GPU detected — CPU mode"))
+        det_lines.append("• " + _("RAM: {ram:.1f} GB").format(ram=ram_gb if ram_gb else 0))
+        det_lines.append("• " + _("Desktop: {de}").format(de=de_env or _("unknown")))
+        det_lines.append("• " + _("System language: {lang}").format(lang=lang_code))
+
+        # Build recommendation description
+        rec_lines = ["• " + _("ASR backend:") + f" <b>{backend_label}{cuda_suffix}</b>"]
+        if is_kde:
+            rec_lines.append("• " + _("KDE plasmoid widget enabled"))
+        else:
+            rec_lines.append("• " + _("System tray (no plasmoid on this desktop)"))
+        rec_lines.append("• " + _("Push-to-talk on F9 (change later if needed)"))
+        if translate_auto:
+            rec_lines.append("• " + _("Translation: LibreTranslate ({src} → EN, fully local)").format(src=lang_code))
+        else:
+            rec_lines.append("• " + _("Translation: off (you can enable later)"))
+
+        card = QWidget()
+        card.setStyleSheet(
+            "QWidget#dictee_rec_card { border: 1px solid palette(mid); "
+            "border-radius: 8px; padding: 16px; background: palette(alternate-base); }")
+        card.setObjectName("dictee_rec_card")
+        clay = QVBoxLayout(card)
+        clay.setSpacing(8)
+        clay.setContentsMargins(20, 16, 20, 16)
+
+        title = QLabel("<b>" + _("Detected on your machine:") + "</b>")
+        clay.addWidget(title)
+        det = QLabel("<br>".join(det_lines))
+        det.setTextFormat(Qt.TextFormat.RichText)
+        clay.addWidget(det)
+
+        clay.addSpacing(8)
+
+        rec_title = QLabel("<b>" + _("Recommended setup:") + "</b>")
+        clay.addWidget(rec_title)
+        rec = QLabel("<br>".join(rec_lines))
+        rec.setTextFormat(Qt.TextFormat.RichText)
+        clay.addWidget(rec)
+
+        clay.addSpacing(12)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        btn_apply_rec = QPushButton(_("Use recommended setup ▶"))
+        btn_apply_rec.setStyleSheet(
+            "QPushButton { padding: 8px 20px; font-weight: bold; "
+            "background: palette(highlight); color: palette(highlighted-text); border-radius: 6px; }"
+            "QPushButton:hover { background: palette(dark); }")
+        btn_apply_rec.clicked.connect(
+            lambda: self._apply_recommended_setup(backend, is_kde, translate_auto, lang_code))
+        btn_row.addWidget(btn_apply_rec)
+        btn_row.addStretch(1)
+        clay.addLayout(btn_row)
+
+        hint = QLabel(
+            "<p style='font-size: 13px; opacity: 0.7;'>"
+            + _("Or click <b>Next</b> below to configure each option manually.")
+            + "</p>")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        clay.addWidget(hint)
+
+        return card
+
+    def _apply_recommended_setup(self, backend, is_kde, translate_auto, lang_code):
+        """Apply the recommended setup and jump to the final test page (QW7).
+
+        Pre-fills the wizard state (ASR backend, plasmoid, translation) and
+        jumps to the last page so the user can review the checks and click
+        Finish. Pages 1-6 remain navigable via Previous if the user changes
+        their mind.
+        """
+        # ASR backend — set both the internal state AND the combo widget so
+        # the page 1 selection card UI reflects the choice if the user goes back.
+        self._wizard_asr = backend
+        if hasattr(self, "cmb_asr_backend"):
+            for i in range(self.cmb_asr_backend.count()):
+                if self.cmb_asr_backend.itemData(i) == backend:
+                    self.cmb_asr_backend.setCurrentIndex(i)
+                    break
+
+        # Translation — only if non-EN system language with enough hardware
+        if translate_auto and hasattr(self, "cmb_translate_backend"):
+            for i in range(self.cmb_translate_backend.count()):
+                if self.cmb_translate_backend.itemData(i) == "libretranslate":
+                    self.cmb_translate_backend.setCurrentIndex(i)
+                    break
+            if hasattr(self, "cmb_lang"):
+                # Source = system language, target = English (best supported)
+                for i in range(self.cmb_lang.count()):
+                    if self.cmb_lang.itemData(i) == lang_code:
+                        self.cmb_lang.setCurrentIndex(i)
+                        break
+
+        # Plasmoid is auto-installed by postinst on KDE — we don't toggle it
+        # here; the user sees it after Finish if they're on KDE Plasma.
+
+        # Jump to the last page (test/checks). Same hooks as _wizard_next
+        # arriving on the last page: save config and run the wizard checks.
+        last = self.stack.count() - 1
+        self.stack.setCurrentIndex(last)
+        self._update_wizard_nav()
+        self._update_canary_translation_visibility()
+        self._on_apply(show_message=False)
+        self._run_wizard_checks()
 
     # -- Wizard Page 1: ASR --
 
