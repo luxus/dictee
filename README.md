@@ -61,7 +61,7 @@ Transcription is performed **100% locally** by default: no audio ever leaves you
 - **4 ASR backends to choose from** — Parakeet-TDT and Canary run as native Rust binaries (ONNX Runtime, low GPU latency), faster-whisper (99 languages) and Vosk (lightweight CPU) in Python. Transparent switching via Unix socket depending on language, latency or hardware. → [4 ASR backends](#4-asr-backends)
 - **5 translation backends to choose from** — from fully local (Canary, LibreTranslate, Ollama) to cloud (Google, Bing), with an explicit privacy table for each option. → [Translation backends](#5-translation-backends)
 - **No duration limit on audio files** — the chunked pipeline shipped in v1.3 (`dictee-transcribe`) diarizes a 54-min keynote in 122 s on an 8 GB GPU, where direct mel loading caps at 10-15 min. Ideal for meeting minutes and long interviews.
-- **Native Linux integration** — KDE Plasma 6 plasmoid + PyQt6 system tray (compatible with GNOME, XFCE, Sway via AppIndicator fallback). No other desktop dictation app offers this on Linux.
+- **Native Linux integration** — KDE Plasma 6 plasmoid + PyQt6 system tray (compatible with GNOME, XFCE, Sway via AppIndicator fallback).
 
 ---
 
