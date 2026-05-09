@@ -6740,7 +6740,10 @@ class DicteeSetupDialog(QDialog):
                 break
         lbl_ver = QLabel(f"v{_ver}")
         lbl_ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_ver.setStyleSheet("font-size: 14px; opacity: 0.5;")
+        _vf = QFont()
+        _vf.setPointSize(max(QApplication.font().pointSize(), 9) + 2)
+        lbl_ver.setFont(_vf)
+        lbl_ver.setStyleSheet("opacity: 0.6;")
         lay.addWidget(lbl_ver)
 
         lay.addStretch(3)
@@ -6857,13 +6860,27 @@ class DicteeSetupDialog(QDialog):
         cols = QHBoxLayout()
         cols.setSpacing(24)
 
+        # Use relative font sizes (+N pt over the system base) so the rendered
+        # size is consistent across themes — Qt CSS font-size in absolute pt
+        # was rendering noticeably smaller on Adwaita-light (VM) than on
+        # Breeze-dark (host dev).
+        base_pt = max(QApplication.font().pointSize(), 9)
+        f_title = QFont()
+        f_title.setPointSize(base_pt + 4)
+        f_title.setBold(True)
+        f_text = QFont()
+        f_text.setPointSize(base_pt + 2)
+        f_text_bold = QFont(f_text)
+        f_text_bold.setBold(True)
+
         col_det = QVBoxLayout()
         col_det.setSpacing(8)
-        det_title = QLabel("<b>" + _("Detected on your machine:") + "</b>")
-        det_title.setStyleSheet("font-size: 15pt; padding-bottom: 4px;")
+        det_title = QLabel(_("Detected on your machine:"))
+        det_title.setFont(f_title)
+        det_title.setStyleSheet("padding-bottom: 4px;")
         col_det.addWidget(det_title)
         det = QLabel("<br>".join(det_lines))
-        det.setStyleSheet("font-size: 13pt;")
+        det.setFont(f_text)
         det.setTextFormat(Qt.TextFormat.RichText)
         det.setWordWrap(True)
         det.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -6872,11 +6889,13 @@ class DicteeSetupDialog(QDialog):
 
         col_rec = QVBoxLayout()
         col_rec.setSpacing(8)
-        rec_title = QLabel("<b>" + _("Recommended setup:") + "</b>")
-        rec_title.setStyleSheet("font-size: 15pt; color: #27ae60; padding-bottom: 4px;")
+        rec_title = QLabel(_("Recommended setup:"))
+        rec_title.setFont(f_title)
+        rec_title.setStyleSheet("color: #27ae60; padding-bottom: 4px;")
         col_rec.addWidget(rec_title)
         rec = QLabel("<br>".join(rec_lines))
-        rec.setStyleSheet("font-size: 13pt; color: #27ae60;")
+        rec.setFont(f_text_bold)
+        rec.setStyleSheet("color: #27ae60;")
         rec.setTextFormat(Qt.TextFormat.RichText)
         rec.setWordWrap(True)
         rec.setAlignment(Qt.AlignmentFlag.AlignTop)
