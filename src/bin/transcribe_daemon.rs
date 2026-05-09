@@ -15,8 +15,14 @@ macro_rules! dbg_print {
     };
 }
 
-/// User-specific socket path using XDG_RUNTIME_DIR or /tmp fallback.
+/// User-specific socket path. Priority:
+///   1. $DICTEE_TRANSCRIBE_SOCKET (used by dictee-setup wizard tests)
+///   2. $XDG_RUNTIME_DIR/transcribe.sock
+///   3. /tmp/transcribe-<uid>.sock fallback
 fn socket_path() -> String {
+    if let Ok(p) = env::var("DICTEE_TRANSCRIBE_SOCKET") {
+        return p;
+    }
     if let Ok(dir) = env::var("XDG_RUNTIME_DIR") {
         format!("{}/transcribe.sock", dir)
     } else {
@@ -62,8 +68,32 @@ impl AsrBackend {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let debug = env::var("DICTEE_DEBUG").unwrap_or_default() == "true";
-    let socket_path = socket_path();
-    let args: Vec<String> = env::args().collect();
+    let raw_args: Vec<String> = env::args().collect();
+    // Optional --socket /path/ override (used by dictee-setup wizard tests
+    // to spawn an ad-hoc daemon without touching the system socket).
+    let socket_path = raw_args
+        .windows(2)
+        .find(|w| w[0] == "--socket")
+        .map(|w| w[1].clone())
+        .unwrap_or_else(socket_path);
+    // Strip --socket and its value so subsequent positional parsing (model_dir)
+    // doesn't mistake the socket path for the model directory.
+    let args: Vec<String> = {
+        let mut out = Vec::with_capacity(raw_args.len());
+        let mut skip_next = false;
+        for a in &raw_args {
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+            if a == "--socket" {
+                skip_next = true;
+                continue;
+            }
+            out.push(a.clone());
+        }
+        out
+    };
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
         eprintln!("transcribe-daemon - ASR daemon via Unix socket (Parakeet TDT / Canary AED)");

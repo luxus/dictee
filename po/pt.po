@@ -1530,8 +1530,15 @@ msgstr "Passo {n} de {total}"
 msgid "Finish"
 msgstr "✓ Concluir"
 
-msgid "Start configuration"
-msgstr "Iniciar configuração"
+msgid "Start complete setup"
+msgstr "Iniciar configuração completa"
+
+msgid ""
+"Quick install\n"
+"(no translation)"
+msgstr ""
+"Instalação rápida\n"
+"(sem tradução)"
 
 msgid "Model required"
 msgstr " (necessário)"

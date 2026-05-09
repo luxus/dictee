@@ -18,7 +18,13 @@ fn user_path(name: &str) -> String {
     }
 }
 
-static SOCKET_PATH: LazyLock<String> = LazyLock::new(|| user_path("transcribe.sock"));
+// Socket path resolution order:
+//   1. $DICTEE_TRANSCRIBE_SOCKET (used by dictee-setup wizard tests for ad-hoc daemons)
+//   2. $XDG_RUNTIME_DIR/transcribe.sock (default per-user system socket)
+//   3. /tmp/transcribe.sock-<uid> (fallback)
+static SOCKET_PATH: LazyLock<String> = LazyLock::new(|| {
+    env::var("DICTEE_TRANSCRIBE_SOCKET").unwrap_or_else(|_| user_path("transcribe.sock"))
+});
 static TEMP_WAV: LazyLock<String> = LazyLock::new(|| user_path("transcribe_recording.wav"));
 static TEMP_CONVERTED: LazyLock<String> = LazyLock::new(|| user_path("transcribe_converted.wav"));
 static TEMP_STDIN: LazyLock<String> = LazyLock::new(|| user_path("transcribe_stdin_input"));

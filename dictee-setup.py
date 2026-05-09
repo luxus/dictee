@@ -286,15 +286,30 @@ ANIMATION_SPEECH_BIN = "animation-speech-ctl"
 
 def detect_desktop():
     """Retourne (nom_affiché, type) avec type = 'kde' | 'gnome' | 'unsupported'."""
-    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
-    if "KDE" in desktop:
+    raw = (os.environ.get("XDG_CURRENT_DESKTOP")
+           or os.environ.get("XDG_SESSION_DESKTOP")
+           or os.environ.get("DESKTOP_SESSION")
+           or os.environ.get("GDMSESSION")
+           or "")
+    # SSH/waypipe fallback: env stripped, query systemd user environment.
+    if not raw:
+        try:
+            out = subprocess.run(["systemctl", "--user", "show-environment"],
+                                 capture_output=True, text=True, timeout=2).stdout
+            for line in out.splitlines():
+                if line.startswith("XDG_CURRENT_DESKTOP="):
+                    raw = line.split("=", 1)[1]
+                    break
+        except Exception:
+            pass
+    desktop = raw.upper()
+    if "KDE" in desktop or "PLASMA" in desktop:
         return "KDE Plasma", "kde"
-    for name in ("GNOME", "UNITY", "CINNAMON"):
+    for name in ("GNOME", "UBUNTU", "UNITY", "CINNAMON"):
         if name in desktop:
-            label = desktop.replace(";", " / ").title()
+            label = raw.replace(":", " / ").replace(";", " / ").title()
             return label, "gnome"
-    raw = os.environ.get("XDG_CURRENT_DESKTOP", _("unknown"))
-    return raw, "unsupported"
+    return raw or _("unknown"), "unsupported"
 
 
 # === Config fichier ===
@@ -2869,7 +2884,7 @@ class TestTranslateThread(QThread):
     def __init__(self, duration=5, asr_backend="parakeet", trans_backend="trans:google",
                  source_lang="fr", target_lang="en", trans_engine="google",
                  lt_port=5000, ollama_model="translategemma", postprocess=False,
-                 silence_threshold=None, parent=None):
+                 silence_threshold=None, wizard_env=None, model_dir=None, parent=None):
         super().__init__(parent)
         self._duration = duration
         self._asr_backend = asr_backend
@@ -2885,6 +2900,11 @@ class TestTranslateThread(QThread):
             else _read_silence_threshold_from_conf())
         self._rec_proc = None
         self._stopped = False
+        # Wizard pre-Finish: spawn ad-hoc daemon instead of using system socket.
+        self._wizard_env = wizard_env
+        self._model_dir = model_dir
+        self._daemon_proc = None
+        self._daemon_socket = None
 
     def stop(self):
         self._stopped = True
@@ -2894,6 +2914,57 @@ class TestTranslateThread(QThread):
                 self._rec_proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._rec_proc.kill()
+        self._stop_ad_hoc_daemon()
+
+    def _start_ad_hoc_daemon(self):
+        """Same logic as TestDicteeThread — spawn isolated daemon for wizard
+        pre-Finish tests. Returns socket path or None."""
+        if not self._wizard_env:
+            return None
+        backend = self._wizard_env.get("DICTEE_ASR_BACKEND", "parakeet")
+        if backend not in ("parakeet", "canary"):
+            return None
+        sock = os.path.join(
+            tempfile.gettempdir(),
+            f"dictee-test-{os.getpid()}-{id(self)}.sock")
+        env = {**os.environ, **self._wizard_env, "DICTEE_TRANSCRIBE_SOCKET": sock}
+        cmd = ["transcribe-daemon", "--socket", sock]
+        if self._model_dir:
+            cmd.append(self._model_dir)
+        if backend == "canary":
+            cmd.append("--canary")
+        try:
+            self._daemon_proc = subprocess.Popen(
+                cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            return None
+        for _ in range(300):
+            if os.path.exists(sock):
+                self._daemon_socket = sock
+                return sock
+            if self._daemon_proc.poll() is not None:
+                return None
+            if self._stopped:
+                self._stop_ad_hoc_daemon()
+                return None
+            time.sleep(0.1)
+        self._stop_ad_hoc_daemon()
+        return None
+
+    def _stop_ad_hoc_daemon(self):
+        if self._daemon_proc and self._daemon_proc.poll() is None:
+            self._daemon_proc.terminate()
+            try:
+                self._daemon_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self._daemon_proc.kill()
+        self._daemon_proc = None
+        if self._daemon_socket:
+            try:
+                os.remove(self._daemon_socket)
+            except FileNotFoundError:
+                pass
+            self._daemon_socket = None
 
     def _unmute_mic(self):
         """Auto-unmute mic, return True if was muted."""
@@ -2942,10 +3013,13 @@ class TestTranslateThread(QThread):
         return True, ""
 
     def _transcribe(self, wav_path):
-        """Transcribe via transcribe-client."""
+        """Transcribe via transcribe-client (socket override if ad-hoc daemon)."""
+        env = os.environ.copy()
+        if self._daemon_socket:
+            env["DICTEE_TRANSCRIBE_SOCKET"] = self._daemon_socket
         r = subprocess.run(
             ["transcribe-client", wav_path],
-            capture_output=True, text=True, timeout=15)
+            capture_output=True, text=True, timeout=30, env=env)
         if r.returncode == 0 and r.stdout.strip():
             text = r.stdout.strip()
             if self._postprocess and shutil.which("dictee-postprocess"):
@@ -2958,10 +3032,13 @@ class TestTranslateThread(QThread):
         return ""
 
     def _translate_canary(self, wav_path):
-        """Send to Canary daemon with target language."""
+        """Send to Canary daemon with target language (ad-hoc socket if wizard)."""
         import socket as _socket
-        runtime = os.environ.get("XDG_RUNTIME_DIR", "")
-        sock_path = os.path.join(runtime, "transcribe.sock") if runtime else f"/tmp/transcribe-{os.getuid()}.sock"
+        if self._daemon_socket:
+            sock_path = self._daemon_socket
+        else:
+            runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+            sock_path = os.path.join(runtime, "transcribe.sock") if runtime else f"/tmp/transcribe-{os.getuid()}.sock"
         sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
         sock.settimeout(15)
         sock.connect(sock_path)
@@ -3069,6 +3146,14 @@ class TestTranslateThread(QThread):
                 self.result.emit(_silence_message(_rms, self._silence_thr))
                 return
 
+            # Spawn ad-hoc daemon if in wizard pre-Finish mode (no system socket).
+            ad_hoc_sock = self._start_ad_hoc_daemon()
+            if self._wizard_env and not ad_hoc_sock:
+                self.result.emit(_("Error: ") + _(
+                    "Could not start the transcribe daemon. "
+                    "Make sure the model is downloaded and try again."))
+                return
+
             if self._asr_backend == "canary":
                 # Canary: single-pass ASR + translation
                 translated = self._translate_canary(wav_path)
@@ -3097,13 +3182,22 @@ class TestTranslateThread(QThread):
             self.result.emit(_("Timeout ({duration}s)").format(duration=self._duration))
         except Exception as e:
             self.result.emit(_("Error: ") + str(e))
+        finally:
+            self._stop_ad_hoc_daemon()
 
 
 class TestDicteeThread(QThread):
-    """Enregistre le micro puis transcrit via transcribe-client <fichier>."""
+    """Enregistre le micro puis transcrit via transcribe-client <fichier>.
+
+    En mode wizard pré-Finish, `wizard_env` (dict d'env vars
+    DICTEE_ASR_BACKEND/LANG_SOURCE/...) déclenche le démarrage d'un daemon
+    transcribe-daemon ad-hoc sur un socket dédié — évite d'écrire dictee.conf
+    et de démarrer un service systemd avant que l'utilisateur valide.
+    """
     result = Signal(str)
 
-    def __init__(self, duration=5, postprocess=False, silence_threshold=None, parent=None):
+    def __init__(self, duration=5, postprocess=False, silence_threshold=None,
+                 wizard_env=None, model_dir=None, parent=None):
         super().__init__(parent)
         self._rec_proc = None
         self._duration = duration
@@ -3112,6 +3206,10 @@ class TestDicteeThread(QThread):
             silence_threshold if silence_threshold is not None
             else _read_silence_threshold_from_conf())
         self._stopped = False
+        self._wizard_env = wizard_env  # dict or None
+        self._model_dir = model_dir
+        self._daemon_proc = None
+        self._daemon_socket = None
 
     def stop(self):
         self._stopped = True
@@ -3121,6 +3219,63 @@ class TestDicteeThread(QThread):
                 self._rec_proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._rec_proc.kill()
+        self._stop_ad_hoc_daemon()
+
+    def _start_ad_hoc_daemon(self):
+        """Spawn an isolated transcribe-daemon for wizard pre-Finish tests.
+        Returns the socket path on success, None if not in wizard_env mode
+        or on failure (caller falls back to system socket)."""
+        if not self._wizard_env:
+            return None
+        backend = self._wizard_env.get("DICTEE_ASR_BACKEND", "parakeet")
+        # Only Parakeet/Canary use transcribe-daemon. Vosk/Whisper have their
+        # own daemons (transcribe-daemon-vosk/whisper) — out of scope here.
+        if backend not in ("parakeet", "canary"):
+            return None
+        sock = os.path.join(
+            tempfile.gettempdir(),
+            f"dictee-test-{os.getpid()}-{id(self)}.sock")
+        env = {**os.environ, **self._wizard_env, "DICTEE_TRANSCRIBE_SOCKET": sock}
+        cmd = ["transcribe-daemon", "--socket", sock]
+        if self._model_dir:
+            cmd.append(self._model_dir)
+        if backend == "canary":
+            cmd.append("--canary")
+        try:
+            self._daemon_proc = subprocess.Popen(
+                cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            return None
+        # Wait up to 30s for socket file (model load can take time on cold start).
+        for _ in range(300):
+            if os.path.exists(sock):
+                self._daemon_socket = sock
+                return sock
+            if self._daemon_proc.poll() is not None:
+                # Daemon died early
+                return None
+            if self._stopped:
+                self._stop_ad_hoc_daemon()
+                return None
+            time.sleep(0.1)
+        # Timeout: kill and give up
+        self._stop_ad_hoc_daemon()
+        return None
+
+    def _stop_ad_hoc_daemon(self):
+        if self._daemon_proc and self._daemon_proc.poll() is None:
+            self._daemon_proc.terminate()
+            try:
+                self._daemon_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self._daemon_proc.kill()
+        self._daemon_proc = None
+        if self._daemon_socket:
+            try:
+                os.remove(self._daemon_socket)
+            except FileNotFoundError:
+                pass
+            self._daemon_socket = None
 
     def run(self):
         wav_path = os.path.join(tempfile.gettempdir(), "dictee_test.wav")
@@ -3183,10 +3338,20 @@ class TestDicteeThread(QThread):
                 self.result.emit(_silence_message(_rms, self._silence_thr))
                 return
 
+            # Spawn ad-hoc daemon if in wizard pre-Finish mode (no system socket).
+            ad_hoc_sock = self._start_ad_hoc_daemon()
+            if self._wizard_env and not ad_hoc_sock:
+                self.result.emit(_("Error: ") + _(
+                    "Could not start the transcribe daemon. "
+                    "Make sure the model is downloaded and try again."))
+                return
+            client_env = os.environ.copy()
+            if ad_hoc_sock:
+                client_env["DICTEE_TRANSCRIBE_SOCKET"] = ad_hoc_sock
             # Transcrire via transcribe-client <fichier>
             r = subprocess.run(
                 ["transcribe-client", wav_path],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True, text=True, timeout=30, env=client_env,
             )
             if r.returncode == 0 and r.stdout.strip():
                 text = r.stdout.strip()
@@ -3208,6 +3373,7 @@ class TestDicteeThread(QThread):
         except FileNotFoundError as e:
             self.result.emit(_("Error: ") + str(e))
         finally:
+            self._stop_ad_hoc_daemon()
             try:
                 os.remove(wav_path)
             except OSError:
@@ -6176,6 +6342,22 @@ class DicteeSetupDialog(QDialog):
         self.lbl_step.setAlignment(Qt.AlignmentFlag.AlignCenter)
         nav.addWidget(self.lbl_step, 1)
 
+        # Quick install — visible only on page 0 (welcome). Applies the
+        # recommended setup WITHOUT translation backend (lighter, no Docker
+        # image to download). Right next to the primary "Start configuration"
+        # button so users see both choices on the same line.
+        self.btn_quick_install = QPushButton("🚀 " + _("Quick install\n(no translation)"))
+        self.btn_quick_install.setToolTip(_(
+            "One-click setup: ASR + tray + shortcut, no translation. "
+            "You can enable translation later from the setup."))
+        self.btn_quick_install.setStyleSheet(
+            "QPushButton { padding: 10px 22px; font-weight: bold; "
+            "background: palette(button); color: palette(button-text); "
+            "border: 1px solid palette(mid); border-radius: 4px; }"
+            "QPushButton:hover { background: palette(midlight); }")
+        self.btn_quick_install.clicked.connect(self._on_quick_install_clicked)
+        nav.addWidget(self.btn_quick_install)
+
         self.btn_next = QPushButton(_("Next"))
         self.btn_next.clicked.connect(self._wizard_next)
         nav.addWidget(self.btn_next)
@@ -6183,10 +6365,19 @@ class DicteeSetupDialog(QDialog):
         outer.addLayout(nav)
         self._update_wizard_nav()
 
+    def _on_quick_install_clicked(self):
+        """Apply recommended setup with translation forced off."""
+        args = getattr(self, '_quick_install_args', None)
+        if args:
+            self._apply_recommended_setup(*args)
+
     def _update_wizard_nav(self):
         idx = self.stack.currentIndex()
         total = self.stack.count()
         self.btn_prev.setEnabled(idx > 0)
+        # Quick install button: only on welcome page (page 0).
+        if hasattr(self, 'btn_quick_install'):
+            self.btn_quick_install.setVisible(idx == 0)
         if idx == 0:
             self.lbl_step.setText("")
         else:
@@ -6195,8 +6386,10 @@ class DicteeSetupDialog(QDialog):
             self.btn_next.setText(_("Finish"))
             self.btn_next.setStyleSheet("font-weight: bold; background: #4a4; color: white; padding: 8px 20px; border-radius: 4px;")
         elif idx == 0:
-            self.btn_next.setText(_("Start configuration"))
-            self.btn_next.setStyleSheet("font-weight: bold; font-size: 15px; padding: 10px 28px;")
+            self.btn_next.setText(_("Start complete setup"))
+            self.btn_next.setStyleSheet("font-weight: bold; font-size: 15px; padding: 10px 28px; "
+                                       "background: palette(highlight); color: palette(highlighted-text); "
+                                       "border-radius: 4px;")
         else:
             self.btn_next.setText(_("Next"))
             self.btn_next.setStyleSheet("")
@@ -6266,14 +6459,80 @@ class DicteeSetupDialog(QDialog):
             # Update canary translation visibility when entering translation page
             self._update_canary_translation_visibility()
             if idx + 1 == self.stack.count() - 1:
-                # Entering checks page — save config, start services, verify.
-                # mark_setup_done=False : the user hasn't clicked Finish yet,
-                # so we omit DICTEE_SETUP_DONE=true. The merge in save_config()
-                # preserves any existing line (reconfig case stays as-is). On
-                # a true first-run, the absence lets the wizard re-launch if
-                # the user closes without clicking Finish.
-                self._on_apply(mark_setup_done=False)
+                # Entering checks page — read-only verification of prerequisites
+                # (services exist, model installed, audio device, etc.).
+                # No write to dictee.conf, no service start: the test buttons
+                # spawn an ad-hoc transcribe-daemon on a dedicated socket when
+                # clicked, so nothing is persisted before the user clicks Finish.
                 self._run_wizard_checks()
+                self._update_test_buttons_state()
+
+    def _update_test_buttons_state(self):
+        """Désactive le bouton test traduction si aucun backend translate sélectionné.
+        En wizard mode, désactive aussi les tests pour Vosk/Whisper (ad-hoc
+        daemon ne supporte que Parakeet/Canary — Vosk/Whisper testables après Finish).
+        Met aussi à jour le résumé translation."""
+        # Translation summary row
+        if hasattr(self, '_lbl_translation_summary'):
+            wt = getattr(self, '_wizard_trans', '') or ""
+            labels = {
+                "libretranslate": _("LibreTranslate (local)"),
+                "ollama": _("Ollama (local LLM)"),
+                "google": _("Google (cloud — sends text to Google)"),
+                "bing": _("Bing (cloud — sends text to Microsoft)"),
+            }
+            if wt:
+                msg = _("Translation: {backend}").format(backend=labels.get(wt, wt))
+            else:
+                msg = _("Translation: disabled — click Configure to enable")
+            self._lbl_translation_summary.setText(msg)
+        asr = getattr(self, '_wizard_asr', '') or self.conf.get("DICTEE_ASR_BACKEND", "parakeet")
+        wizard_unsupported = self.wizard_mode and asr not in ("parakeet", "canary")
+        if hasattr(self, 'btn_test_dictee'):
+            self.btn_test_dictee.setEnabled(not wizard_unsupported)
+            if wizard_unsupported:
+                self.btn_test_dictee.setToolTip(
+                    _("Test available after Finish (Vosk/Whisper require system daemon)"))
+            else:
+                self.btn_test_dictee.setToolTip("")
+        if hasattr(self, 'btn_test_translate'):
+            has_translate = bool(getattr(self, '_wizard_trans', ''))
+            self.btn_test_translate.setEnabled(has_translate and not wizard_unsupported)
+            if wizard_unsupported:
+                self.btn_test_translate.setToolTip(
+                    _("Test available after Finish (Vosk/Whisper require system daemon)"))
+            elif not has_translate:
+                self.btn_test_translate.setToolTip(_("No translation backend selected"))
+            else:
+                self.btn_test_translate.setToolTip("")
+
+    def _wizard_test_env(self):
+        """Build env vars for an ad-hoc transcribe-daemon spawned by the test
+        buttons. Returns None when the system daemon should be used instead:
+        - settings mode (wizard_mode=False) — daemon already runs
+        - reconfig wizard on an already-configured install (conf existed and
+          DICTEE_SETUP_DONE=true) — re-use the running system daemon to avoid
+          a useless model-load roundtrip
+        - backends without transcribe-daemon support (vosk/whisper)
+        Otherwise (true first-run) returns env vars for the ad-hoc daemon.
+        """
+        if not self.wizard_mode:
+            return None
+        asr = getattr(self, '_wizard_asr', '') or self.conf.get("DICTEE_ASR_BACKEND", "parakeet")
+        if asr not in ("parakeet", "canary"):
+            return None
+        setup_done = self.conf.get("DICTEE_SETUP_DONE", "") == "true"
+        if getattr(self, '_conf_existed_before_wizard', False) and setup_done:
+            return None  # post-install reconfig: use system daemon
+        env = {"DICTEE_ASR_BACKEND": asr}
+        src = "fr"
+        for attr in ("cmb_lang", "combo_src"):
+            cmb = getattr(self, attr, None)
+            if cmb is not None and cmb.currentData():
+                src = cmb.currentData()
+                break
+        env["DICTEE_LANG_SOURCE"] = src
+        return env
 
     def _validate_wizard_page(self, idx):
         """Valide la page courante avant d'avancer. Retourne True si OK."""
@@ -6344,30 +6603,47 @@ class DicteeSetupDialog(QDialog):
                 # "Docker permissions" wording was misleading when docker
                 # was simply absent (FileNotFoundError).
                 if not shutil.which("docker"):
-                    QMessageBox.warning(self, _("Docker required"),
+                    return self._translate_required_dialog(
+                        _("Docker required"),
                         _("LibreTranslate needs Docker, which is not installed.\n\n"
                           "Install via:\n"
                           "  Debian/Ubuntu: sudo apt install docker.io\n"
                           "  Fedora: sudo dnf install moby-engine\n"
-                          "  Arch: sudo pacman -S docker\n\n"
-                          "Or pick a different translation backend (Google, Bing, Ollama)."))
-                    return False
+                          "  Arch: sudo pacman -S docker"))
                 if not docker_is_accessible() and not getattr(self, '_docker_group_fixed', False):
-                    QMessageBox.warning(self, _("Docker permissions required"),
+                    return self._translate_required_dialog(
+                        _("Docker permissions required"),
                         _("Docker is installed but not accessible. Make sure the\n"
                           "Docker service is running, and that your user is in\n"
                           "the 'docker' group. Use the 'Fix permissions' button\n"
                           "on this page if available."))
-                    return False
             elif backend == "ollama":
                 if not shutil.which("ollama"):
-                    QMessageBox.warning(self, _("Ollama required"),
+                    return self._translate_required_dialog(
+                        _("Ollama required"),
                         _("Ollama is not installed. Install via:\n\n"
-                          "  curl -fsSL https://ollama.com/install.sh | sh\n\n"
-                          "Or pick a different translation backend "
-                          "(Google, Bing, LibreTranslate)."))
-                    return False
+                          "  curl -fsSL https://ollama.com/install.sh | sh"))
         return True
+
+    def _translate_required_dialog(self, title, text):
+        """Show 'XX required' dialog with [Disable translation and continue] /
+        [Go back] buttons. Returns True if user chose to disable translation
+        (validate_wizard_page returns True → wizard advances), False to stay."""
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        btn_disable = msg.addButton(_("Disable translation and continue"),
+                                    QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(_("Go back"), QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if msg.clickedButton() is btn_disable:
+            if hasattr(self, '_chk_trans_disabled'):
+                self._chk_trans_disabled.setChecked(True)
+            else:
+                self._wizard_trans = ""
+            return True
+        return False
 
     # -- Project logos grid --
 
@@ -6509,8 +6785,8 @@ class DicteeSetupDialog(QDialog):
         ram_gb, gpu_name, gpu_total, _gpu_free = self._get_system_info()
         lang_env = os.environ.get("LANG") or os.environ.get("LC_ALL") or ""
         lang_code = (lang_env.split(".")[0].split("_")[0] if lang_env else "en").lower() or "en"
-        de_env = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-        is_kde = "kde" in de_env or "plasma" in de_env
+        de_label, de_type = detect_desktop()
+        is_kde = de_type == "kde"
 
         backend = self._get_recommended_backend(ram_gb, gpu_total)
         backend_label = {"parakeet": "Parakeet-TDT v3", "canary": "Canary 1B v2",
@@ -6521,10 +6797,19 @@ class DicteeSetupDialog(QDialog):
         elif backend in ("parakeet", "whisper"):
             cuda_suffix = " " + _("(CPU mode)")
 
-        # Translation auto-enable: non-English system language + enough RAM + Docker
-        # present → suggest LibreTranslate (system_lang → EN, fully local). Otherwise off.
+        # Translation auto-enable: non-English system language + enough RAM + a
+        # local backend (LibreTranslate or Ollama). Cascade local-first to keep
+        # dictee's "100% local" promise — never auto-pick Google/Bing (cloud).
         docker_ok = bool(shutil.which("docker"))
-        translate_auto = (lang_code != "en" and ram_gb >= 8 and docker_ok)
+        ollama_ok = bool(shutil.which("ollama"))
+        if docker_ok:
+            translate_local_choice = "libretranslate"
+        elif ollama_ok:
+            translate_local_choice = "ollama"
+        else:
+            translate_local_choice = ""
+        translate_auto = (lang_code != "en" and ram_gb >= 8
+                          and bool(translate_local_choice))
 
         # Build detection description
         det_lines = []
@@ -6534,7 +6819,7 @@ class DicteeSetupDialog(QDialog):
         else:
             det_lines.append("• " + _("No NVIDIA GPU detected — CPU mode"))
         det_lines.append("• " + _("RAM: {ram:.1f} GB").format(ram=ram_gb if ram_gb else 0))
-        det_lines.append("• " + _("Desktop: {de}").format(de=de_env or _("unknown")))
+        det_lines.append("• " + _("Desktop: {de}").format(de=de_label))
         det_lines.append("• " + _("System language: {lang}").format(lang=lang_code))
 
         # Build recommendation description
@@ -6544,8 +6829,12 @@ class DicteeSetupDialog(QDialog):
         else:
             rec_lines.append("• " + _("System tray (no plasmoid on this desktop)"))
         rec_lines.append("• " + _("Push-to-talk on F9 (change later if needed)"))
-        if translate_auto:
+        if translate_auto and translate_local_choice == "libretranslate":
             rec_lines.append("• " + _("Translation: LibreTranslate ({src} → EN, fully local)").format(src=lang_code))
+        elif translate_auto and translate_local_choice == "ollama":
+            rec_lines.append("• " + _("Translation: Ollama ({src} → EN, local LLM)").format(src=lang_code))
+        elif lang_code != "en":
+            rec_lines.append("• " + _("Translation: off — install Docker or Ollama for local translation"))
         else:
             rec_lines.append("• " + _("Translation: off (you can enable later)"))
 
@@ -6556,47 +6845,46 @@ class DicteeSetupDialog(QDialog):
         card.setObjectName("dictee_rec_card")
         clay = QVBoxLayout(card)
         clay.setSpacing(8)
-        clay.setContentsMargins(20, 16, 20, 16)
+        clay.setContentsMargins(20, 14, 20, 14)
 
-        title = QLabel("<b>" + _("Detected on your machine:") + "</b>")
-        clay.addWidget(title)
+        # Two columns side-by-side: Detected (left) | Recommended (right)
+        # Avoids vertical overflow on smaller windows (VM, lower-DPI screens).
+        cols = QHBoxLayout()
+        cols.setSpacing(24)
+
+        col_det = QVBoxLayout()
+        col_det.setSpacing(4)
+        col_det.addWidget(QLabel("<b>" + _("Detected on your machine:") + "</b>"))
         det = QLabel("<br>".join(det_lines))
         det.setTextFormat(Qt.TextFormat.RichText)
-        clay.addWidget(det)
+        det.setWordWrap(True)
+        det.setAlignment(Qt.AlignmentFlag.AlignTop)
+        col_det.addWidget(det, 1)
+        cols.addLayout(col_det, 1)
 
-        clay.addSpacing(8)
-
-        rec_title = QLabel("<b>" + _("Recommended setup:") + "</b>")
-        clay.addWidget(rec_title)
+        col_rec = QVBoxLayout()
+        col_rec.setSpacing(4)
+        col_rec.addWidget(QLabel("<b>" + _("Recommended setup:") + "</b>"))
         rec = QLabel("<br>".join(rec_lines))
         rec.setTextFormat(Qt.TextFormat.RichText)
-        clay.addWidget(rec)
+        rec.setWordWrap(True)
+        rec.setAlignment(Qt.AlignmentFlag.AlignTop)
+        col_rec.addWidget(rec, 1)
+        cols.addLayout(col_rec, 1)
 
-        clay.addSpacing(12)
+        clay.addLayout(cols)
+        clay.addSpacing(8)
 
-        btn_row = QHBoxLayout()
-        btn_row.addStretch(1)
-        btn_apply_rec = QPushButton(_("Use recommended setup ▶"))
-        btn_apply_rec.setStyleSheet(
-            "QPushButton { padding: 8px 20px; font-weight: bold; "
-            "background: palette(highlight); color: palette(highlighted-text); border-radius: 6px; }"
-            "QPushButton:hover { background: palette(dark); }")
-        btn_apply_rec.clicked.connect(
-            lambda: self._apply_recommended_setup(backend, is_kde, translate_auto, lang_code))
-        btn_row.addWidget(btn_apply_rec)
-        btn_row.addStretch(1)
-        clay.addLayout(btn_row)
-
-        hint = QLabel(
-            "<p style='font-size: 13px; opacity: 0.7;'>"
-            + _("Or click <b>Next</b> below to configure each option manually.")
-            + "</p>")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        clay.addWidget(hint)
-
+        # Buttons live in the bottom nav bar (Quick install + Start configuration),
+        # not in the card itself. Stash the apply args so the nav handlers can use
+        # them when the user clicks the corresponding button on page 0.
+        self._quick_install_args = (backend, is_kde, False, lang_code, "")
+        self._standard_setup_args = (backend, is_kde, translate_auto, lang_code,
+                                     translate_local_choice)
         return card
 
-    def _apply_recommended_setup(self, backend, is_kde, translate_auto, lang_code):
+    def _apply_recommended_setup(self, backend, is_kde, translate_auto,
+                                 lang_code, translate_local_choice=""):
         """Apply the recommended setup and jump to the final test page (QW7).
 
         Pre-fills the wizard state (ASR backend, plasmoid, translation) and
@@ -6613,33 +6901,58 @@ class DicteeSetupDialog(QDialog):
                     self.cmb_asr_backend.setCurrentIndex(i)
                     break
 
-        # Translation — only if non-EN system language with enough hardware
-        if translate_auto and hasattr(self, "cmb_translate_backend"):
-            for i in range(self.cmb_translate_backend.count()):
-                if self.cmb_translate_backend.itemData(i) == "libretranslate":
-                    self.cmb_translate_backend.setCurrentIndex(i)
-                    break
+        # Translation — local-first cascade. Never auto-pick Google/Bing (cloud).
+        if translate_auto and translate_local_choice:
+            self._wizard_trans = translate_local_choice
+            if hasattr(self, '_chk_trans_disabled') and self._chk_trans_disabled.isChecked():
+                self._chk_trans_disabled.blockSignals(True)
+                self._chk_trans_disabled.setChecked(False)
+                self._chk_trans_disabled.blockSignals(False)
             if hasattr(self, "cmb_lang"):
                 # Source = system language, target = English (best supported)
                 for i in range(self.cmb_lang.count()):
                     if self.cmb_lang.itemData(i) == lang_code:
                         self.cmb_lang.setCurrentIndex(i)
                         break
+        else:
+            # No local translation backend available (or English source).
+            # Don't silently fall back to Google/Bing — these are cloud
+            # services that send your text to remote servers, contradicting
+            # dictee's 100% local promise. Warn explicitly when the user
+            # would have benefited from translation.
+            if lang_code != "en":
+                QMessageBox.information(
+                    self, _("No local translation backend installed"),
+                    _("dictee aims to keep everything 100% local.\n\n"
+                      "To translate your dictation locally, install one of:\n\n"
+                      "  • LibreTranslate (Docker) — best quality, ~20 languages\n"
+                      "      sudo apt install docker.io\n"
+                      "      (Fedora: sudo dnf install moby-engine — Arch: sudo pacman -S docker)\n\n"
+                      "  • Ollama (local LLM) — uses any installed model\n"
+                      "      curl -fsSL https://ollama.com/install.sh | sh\n\n"
+                      "Google and Bing translation work too, but they send your text\n"
+                      "to remote servers. They're available manually in the wizard if\n"
+                      "you accept that trade-off, but recommended setup won't enable\n"
+                      "them automatically.\n\n"
+                      "Continuing without translation — you can enable it later from\n"
+                      "the dictee setup wizard."))
+            if hasattr(self, '_chk_trans_disabled'):
+                self._chk_trans_disabled.setChecked(True)
+            else:
+                self._wizard_trans = ""
 
         # Plasmoid is auto-installed by postinst on KDE — we don't toggle it
         # here; the user sees it after Finish if they're on KDE Plasma.
 
         # Jump to the last page (test/checks). Same hooks as _wizard_next
-        # arriving on the last page: save config and run the wizard checks.
-        # mark_setup_done=False — same reasoning as in _wizard_next: the
-        # user clicked "Use recommended setup" but hasn't validated via
-        # Finish yet. Cf. Option E.
+        # arriving on the last page: read-only checks. Nothing is persisted
+        # until Finish — test buttons spawn an ad-hoc daemon if used.
         last = self.stack.count() - 1
         self.stack.setCurrentIndex(last)
         self._update_wizard_nav()
         self._update_canary_translation_visibility()
-        self._on_apply(show_message=False, mark_setup_done=False)
         self._run_wizard_checks()
+        self._update_test_buttons_state()
 
     # -- Wizard Page 1: ASR --
 
@@ -7118,7 +7431,9 @@ class DicteeSetupDialog(QDialog):
         elif existing in ("libretranslate", "ollama"):
             self._wizard_trans = existing
         elif self.wizard_mode:
-            self._wizard_trans = "google"
+            # First-run wizard: no translation by default. User picks explicitly.
+            # Local-first: don't auto-select Google/Bing (cloud services).
+            self._wizard_trans = ""
         else:
             self._wizard_trans = "google"
 
@@ -7380,6 +7695,21 @@ class DicteeSetupDialog(QDialog):
             lay_checks.addLayout(row)
             self._check_labels[check_id] = (lbl_icon, lbl_status)
         lay.addWidget(self.w_checks)
+
+        # Translation summary row + Configure button (jumps to translation page).
+        # Lets the user see what translate backend will be used and reach the
+        # config page in one click without manually navigating Previous.
+        trans_row = QHBoxLayout()
+        trans_row.setContentsMargins(0, 4, 0, 4)
+        trans_row.addWidget(QLabel("🌐"))
+        self._lbl_translation_summary = QLabel()
+        self._lbl_translation_summary.setWordWrap(True)
+        trans_row.addWidget(self._lbl_translation_summary, 1)
+        btn_cfg_trans = QPushButton(_("Configure translation"))
+        btn_cfg_trans.setToolTip(_("Go back to the translation page to change settings"))
+        btn_cfg_trans.clicked.connect(lambda: self.stack.setCurrentIndex(4))
+        trans_row.addWidget(btn_cfg_trans)
+        lay.addLayout(trans_row)
 
         # Test dictée
         grp_test = QGroupBox(_("Dictation test"))
@@ -14335,6 +14665,14 @@ class DicteeSetupDialog(QDialog):
                     ptt_k = getattr(self, '_ptt_key', int(self.conf.get("DICTEE_PTT_KEY", 67)))
                     lbl_status.setText('<span style="color: green;">'
                                       + linux_keycode_name(ptt_k) + '</span>')
+                elif check_id == "daemon" and self.wizard_mode and not getattr(
+                        self, '_conf_existed_before_wizard', False):
+                    # True first-run: service unit installed but not started yet
+                    # (will be at Finish). Make this explicit instead of "OK".
+                    lbl_status.setText(
+                        '<span style="color: green;">' + _("Installed") + '</span> '
+                        '<span style="color: palette(text); opacity: 0.7;">— '
+                        + _("will be activated on Finish") + '</span>')
                 else:
                     lbl_status.setText('<span style="color: green;">' + _("OK") + '</span>')
             else:
@@ -14362,14 +14700,33 @@ class DicteeSetupDialog(QDialog):
             )
 
     def _check_daemon_active(self):
-        """Vérifie que le service ASR est réellement actif (et la socket ouverte
-        pour les backends Rust). Tolère un état `activating` transitoire (model
-        loading) jusqu'à ~6 s avant de conclure à l'échec, ce qui évite un
-        faux positif quand le daemon crashe en boucle (driver CUDA cassé,
-        modèle absent, etc.)."""
+        """Vérifie l'état du service ASR.
+
+        - Wizard pre-Finish : vérifie juste que le service systemd est
+          INSTALLÉ (le service ne tourne pas encore — il sera démarré au
+          clic Finish). Évite un faux négatif maintenant que la page 7
+          n'écrit plus dictee.conf et ne démarre plus les services.
+        - Mode settings/post-Finish : vérifie l'état actif réel (active +
+          socket ouverte pour Rust). Tolère `activating` ~6 s.
+        """
         asr = self._wizard_asr if hasattr(self, '_wizard_asr') else "parakeet"
         svc = {"parakeet": "dictee", "vosk": "dictee-vosk",
                "whisper": "dictee-whisper", "canary": "dictee-canary"}.get(asr, "dictee")
+        # True first-run wizard (no prior dictee.conf): the service hasn't been
+        # started yet (will be at Finish). Fallback to "is the unit installed".
+        # Reconfig wizard or settings: check live state.
+        true_first_run = (
+            self.wizard_mode
+            and not getattr(self, '_wizard_finished', False)
+            and not getattr(self, '_conf_existed_before_wizard', False))
+        if true_first_run:
+            try:
+                r = subprocess.run(
+                    ["systemctl", "--user", "list-unit-files", f"{svc}.service"],
+                    capture_output=True, text=True, timeout=2)
+                return f"{svc}.service" in r.stdout
+            except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+                return False
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
         sock = os.path.join(runtime_dir, "transcribe.sock")
         needs_socket = asr in ("parakeet", "canary")
@@ -14459,7 +14816,13 @@ class DicteeSetupDialog(QDialog):
     def closeEvent(self, event):
         self._stop_audio_level()
         self._cleanup_calib_records()
-        # Wizard annulé : rien n'a été écrit sur disque, rien à nettoyer
+        # Stop any ad-hoc daemon if a test thread is still running. The thread's
+        # stop() also cleans up the socket file.
+        if getattr(self, '_test_thread', None) and self._test_thread.isRunning():
+            self._test_thread.stop()
+            self._test_thread.wait(2000)
+        # Wizard annulé : aucune écriture sur disque (l'arrivée page 7 ne
+        # déclenche plus _on_apply), rien à nettoyer.
         super().closeEvent(event)
 
     # ── Test dictation ────────────────────────────────────────────
@@ -14484,7 +14847,8 @@ class DicteeSetupDialog(QDialog):
             self.slider_silence.value() / 1000.0
             if hasattr(self, 'slider_silence') else None)
         self._test_thread = TestDicteeThread(
-            duration=5, postprocess=pp_enabled, silence_threshold=_thr)
+            duration=5, postprocess=pp_enabled, silence_threshold=_thr,
+            wizard_env=self._wizard_test_env())
         self._test_thread.result.connect(self._on_test_result)
         self._test_thread.start()
 
@@ -14543,11 +14907,14 @@ class DicteeSetupDialog(QDialog):
         _thr = (
             self.slider_silence.value() / 1000.0
             if hasattr(self, 'slider_silence') else None)
+        wenv = self._wizard_test_env()
+        if wenv and asr == "canary":
+            wenv["DICTEE_LANG_TARGET"] = target  # Canary inline translation
         self._test_thread = TestTranslateThread(
             duration=5, asr_backend=asr, trans_backend=trans_backend,
             source_lang=source, target_lang=target, trans_engine=trans_engine,
             lt_port=lt_port, ollama_model=ollama_model, postprocess=pp_enabled,
-            silence_threshold=_thr,
+            silence_threshold=_thr, wizard_env=wenv,
         )
         self._test_thread.result.connect(self._on_test_translate_result)
         self._test_thread.start()
