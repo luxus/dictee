@@ -5575,8 +5575,14 @@ class DicteeSetupDialog(QDialog):
                 for line in (r.stdout or "").splitlines():
                     parts = line.split()
                     if len(parts) >= 2 and parts[1]:
+                        # pkg_name kept so _check_for_updates can match the
+                        # exact asset (avoids proposing dictee-cpu .deb to
+                        # a dictee-cuda user — the assets share the .deb
+                        # extension and the previous endswith() loop just
+                        # picked the first .deb alphabetically).
                         return {"kind": "deb", "label": f"{parts[0]} {parts[1]}",
-                                "asset_hint": ".deb"}
+                                "asset_hint": ".deb",
+                                "pkg_name": parts[0]}
             except Exception as _e:
                 _dbg_setup(f"silenced: {_e!r}")
         # rpm (Fedora/RHEL/openSUSE)
@@ -5592,17 +5598,20 @@ class DicteeSetupDialog(QDialog):
                     parts = line.split()
                     if len(parts) >= 2:
                         return {"kind": "rpm", "label": f"{parts[0]} {parts[1]}",
-                                "asset_hint": ".rpm"}
+                                "asset_hint": ".rpm",
+                                "pkg_name": parts[0]}
             except Exception as _e:
                 _dbg_setup(f"silenced: {_e!r}")
-        # pacman (Arch)
+        # pacman (Arch) — no binary asset published in the release (users
+        # build from source via PKGBUILD + makepkg -si). _check_for_updates
+        # surfaces the new version + manual install instructions.
         if shutil.which("pacman"):
             try:
                 r = subprocess.run(["pacman", "-Q", "dictee"],
                                    capture_output=True, text=True, timeout=5)
                 if r.returncode == 0 and r.stdout.strip():
                     return {"kind": "pacman", "label": r.stdout.strip(),
-                            "asset_hint": ".pkg.tar.zst"}
+                            "asset_hint": ""}
             except Exception as _e:
                 _dbg_setup(f"silenced: {_e!r}")
         # Source install detected via presence of Cargo.toml alongside
@@ -5610,6 +5619,13 @@ class DicteeSetupDialog(QDialog):
         if os.path.isfile(os.path.join(_script_dir, "Cargo.toml")):
             return {"kind": "source", "label": _("Source tree / git checkout"),
                     "asset_hint": ".tar.gz"}
+        # Tarball install detected if /usr/bin/dictee exists but no package
+        # manager claimed it. The "_amd64" segment in the asset_hint excludes
+        # the source tarball (dictee-X.Y.Z-source.tar.gz) so the user gets
+        # the pre-built binary archive.
+        if os.path.isfile("/usr/bin/dictee"):
+            return {"kind": "tarball", "label": _("Tarball install"),
+                    "asset_hint": "_amd64.tar.gz"}
         return {"kind": "unknown", "label": _("Unknown install type"),
                 "asset_hint": ""}
 
@@ -5692,17 +5708,38 @@ class DicteeSetupDialog(QDialog):
         accent_hex = self.palette().color(
             self.palette().ColorRole.Highlight).name()
 
-        # Find matching asset for the install type
+        # Find matching asset for the install type. For deb / rpm, also
+        # match the exact package name (dictee-cpu vs dictee-cuda vs dictee
+        # vs dictee-plasmoid) — otherwise a CUDA user would be offered
+        # the CPU .deb because it sorts first alphabetically.
         hint = install_info.get("asset_hint", "")
+        pkg_name = install_info.get("pkg_name", "")
+        kind = install_info.get("kind", "")
         asset_line = ""
         if hint:
             for asset in data.get("assets", []):
                 name = asset.get("name", "")
                 url = asset.get("browser_download_url", "")
-                if name.endswith(hint):
-                    asset_line = (f"<br>{_('Asset for your install')}: "
-                                  f"<a href='{url}' style='color:{accent_hex};'>{name}</a>")
-                    break
+                if not name.endswith(hint):
+                    continue
+                # When a package name is known, require the asset to
+                # start with it (with a "_" or "-" separator) so we
+                # don't pick dictee-cpu for a dictee-cuda install.
+                if pkg_name and not (name.startswith(pkg_name + "_")
+                                     or name.startswith(pkg_name + "-")):
+                    continue
+                asset_line = (f"<br>{_('Asset for your install')}: "
+                              f"<a href='{url}' style='color:{accent_hex};'>{name}</a>")
+                break
+        elif kind == "pacman":
+            # Arch users build from source via makepkg — no binary asset
+            # is shipped. Surface concrete install instructions instead.
+            asset_line = (
+                "<br><span style='font-size:12px; opacity:0.85;'>"
+                + _("Arch install: <code>git pull &amp;&amp; makepkg -si</code> "
+                    "from the dictee PKGBUILD directory, or <code>{cmd}</code>.").format(
+                        cmd="curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash")
+                + "</span>")
 
         if new_t > cur_t:
             lbl_status.setText(
@@ -5763,7 +5800,7 @@ class DicteeSetupDialog(QDialog):
             f"{_('Language')}: Python, Rust &amp; Bash</p>"
             f"<p><a href='https://github.com/rcspam/dictee' style='color:{accent_hex};'>"
             f"github.com/rcspam/dictee</a></p>"
-            f"<p style='font-size:11px; opacity:0.8; text-align:left;'>"
+            f"<p style='font-size:13px; opacity:0.8; text-align:left;'>"
             f"<b>{_('Built on')}:</b><br>"
             f"• Parakeet-TDT 0.6B v3 — CC-BY-4.0 (NVIDIA NeMo)<br>"
             f"• Canary 1B v2 — CC-BY-4.0 (NVIDIA NeMo)<br>"
@@ -5792,7 +5829,7 @@ class DicteeSetupDialog(QDialog):
             + _("Installation: {label}").format(label=install_info["label"]) +
             "</span>")
         lbl_install.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_install.setStyleSheet("font-size: 12px;")
+        lbl_install.setStyleSheet("font-size: 14px;")
         lay.addWidget(lbl_install)
 
         # Runtime mode (CUDA active vs CPU fallback) — visible so the user
@@ -5826,14 +5863,14 @@ class DicteeSetupDialog(QDialog):
         if _rt_html:
             lbl_runtime = QLabel(_rt_html)
             lbl_runtime.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl_runtime.setStyleSheet("font-size: 12px;")
+            lbl_runtime.setStyleSheet("font-size: 14px;")
             lay.addWidget(lbl_runtime)
 
         lbl_upd_status = QLabel(_("Click \"Check for updates\" to query GitHub."))
         lbl_upd_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_upd_status.setWordWrap(True)
         lbl_upd_status.setOpenExternalLinks(True)
-        lbl_upd_status.setStyleSheet("font-size: 12px;")
+        lbl_upd_status.setStyleSheet("font-size: 14px;")
         lay.addWidget(lbl_upd_status)
 
         btn_row = QHBoxLayout()
