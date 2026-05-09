@@ -6386,10 +6386,11 @@ class DicteeSetupDialog(QDialog):
             self.btn_next.setText(_("Finish"))
             self.btn_next.setStyleSheet("font-weight: bold; background: #4a4; color: white; padding: 8px 20px; border-radius: 4px;")
         elif idx == 0:
-            self.btn_next.setText(_("Start complete setup"))
-            self.btn_next.setStyleSheet("font-weight: bold; font-size: 15px; padding: 10px 28px; "
-                                       "background: palette(highlight); color: palette(highlighted-text); "
-                                       "border-radius: 4px;")
+            self.btn_next.setText(_("Start complete\nsetup"))
+            self.btn_next.setStyleSheet(
+                "QPushButton { padding: 10px 22px; font-weight: bold; "
+                "background: palette(highlight); color: palette(highlighted-text); "
+                "border-radius: 4px; }")
         else:
             self.btn_next.setText(_("Next"))
             self.btn_next.setStyleSheet("")
@@ -6843,9 +6844,10 @@ class DicteeSetupDialog(QDialog):
             "QWidget#dictee_rec_card { border: 1px solid palette(mid); "
             "border-radius: 8px; padding: 16px; background: palette(alternate-base); }")
         card.setObjectName("dictee_rec_card")
+        card.setMinimumHeight(290)
         clay = QVBoxLayout(card)
-        clay.setSpacing(8)
-        clay.setContentsMargins(20, 14, 20, 14)
+        clay.setSpacing(14)
+        clay.setContentsMargins(28, 24, 28, 24)
 
         # Two columns side-by-side: Detected (left) | Recommended (right)
         # Avoids vertical overflow on smaller windows (VM, lower-DPI screens).
@@ -6864,8 +6866,10 @@ class DicteeSetupDialog(QDialog):
 
         col_rec = QVBoxLayout()
         col_rec.setSpacing(4)
-        col_rec.addWidget(QLabel("<b>" + _("Recommended setup:") + "</b>"))
-        rec = QLabel("<br>".join(rec_lines))
+        col_rec.addWidget(QLabel(
+            "<b style='color: #27ae60;'>" + _("Recommended setup:") + "</b>"))
+        rec = QLabel(
+            "<span style='color: #27ae60;'>" + "<br>".join(rec_lines) + "</span>")
         rec.setTextFormat(Qt.TextFormat.RichText)
         rec.setWordWrap(True)
         rec.setAlignment(Qt.AlignmentFlag.AlignTop)

@@ -1406,7 +1406,9 @@ msgstr ""
 msgid "Finish"
 msgstr ""
 
-msgid "Start complete setup"
+msgid ""
+"Start complete\n"
+"setup"
 msgstr ""
 
 msgid ""
