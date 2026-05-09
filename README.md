@@ -90,6 +90,8 @@ Three steps to go from zero to dictation in under two minutes:
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash
 ```
 
+> Prefer to audit before running? `install.sh` and `install.sh.sha256` are published as release assets — download both, verify with `sha256sum -c install.sh.sha256`, read the script, then run it.
+
 **2. Configure**
 
 The first-run wizard walks you through backend selection, model download and keyboard shortcut binding. Re-run anytime with `dictee --setup`.

@@ -90,6 +90,8 @@ Trois étapes pour passer de zéro à la dictée en moins de deux minutes :
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash
 ```
 
+> Vous préférez auditer le script avant exécution ? `install.sh` et `install.sh.sha256` sont publiés comme assets de la release — téléchargez les deux, vérifiez avec `sha256sum -c install.sh.sha256`, lisez le script, puis lancez-le.
+
 **2. Configurer**
 
 L'assistant de premier lancement vous guide pour la sélection du backend, le téléchargement du modèle et l'association du raccourci clavier. Relancez à tout moment via `dictee --setup`.
