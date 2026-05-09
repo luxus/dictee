@@ -364,7 +364,8 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 notifications=True, notifications_text=True,
                 command_suffixes=None, debug=False,
                 trpp_states=None, trpp_short_text_max=3,
-                cheatsheet_mod="", cheatsheet_key_seq=""):
+                cheatsheet_mod="", cheatsheet_key_seq="",
+                mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
     Reads the existing file (or the template on first run), then patches
@@ -395,8 +396,16 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
         "DICTEE_AUDIO_CONTEXT": "true" if audio_context else "false",
         "DICTEE_AUDIO_CONTEXT_TIMEOUT": str(audio_context_timeout),
         "DICTEE_SILENCE_RMS": f"{silence_rms:.3f}",
-        "DICTEE_SETUP_DONE": "true",
     }
+    # DICTEE_SETUP_DONE is added only when explicitly committing the wizard
+    # (Finish button or classic Apply). At wizard checks-page entry (page 6→7
+    # transition), we save the config so services can restart with the new
+    # values for the live checks, but we OMIT this key — the merge in this
+    # function preserves any existing DICTEE_SETUP_DONE=true line untouched
+    # (reconfig case stays as-is), while a true first-run leaves the key
+    # absent so the wizard re-launches if the user closes without Finish.
+    if mark_setup_done:
+        values["DICTEE_SETUP_DONE"] = "true"
     # Conditional values (only written when non-default)
     if whisper_lang:
         values["DICTEE_WHISPER_LANG"] = _s(whisper_lang)
@@ -4858,7 +4867,7 @@ class LLMProfilesDialog(QDialog):
 
 
 class DicteeSetupDialog(QDialog):
-    def __init__(self, wizard=False, open_postprocess=False, open_translation=False):
+    def __init__(self, wizard=False, first_run=False, open_postprocess=False, open_translation=False):
         super().__init__()
         _conf_exists = os.path.exists(CONF_PATH)
         _setup_done = False
@@ -4866,6 +4875,7 @@ class DicteeSetupDialog(QDialog):
             _tmp = load_config()
             _setup_done = (_tmp.get("DICTEE_SETUP_DONE", "") == "true")
         self.wizard_mode = wizard or not _conf_exists or not _setup_done
+        self._force_first_run = first_run  # dev flag — simule l'expérience première fois
         self._wizard_finished = False
         self._conf_existed_before_wizard = _conf_exists
         self.setWindowTitle(_("Voice dictation configuration"))
@@ -6108,7 +6118,7 @@ class DicteeSetupDialog(QDialog):
         nav = QHBoxLayout()
         nav.setContentsMargins(20, 8, 20, 16)
 
-        self._is_first_setup = (self.conf.get("DICTEE_SETUP_DONE", "") != "true")
+        self._is_first_setup = (self.conf.get("DICTEE_SETUP_DONE", "") != "true") or getattr(self, "_force_first_run", False)
 
         self.btn_prev = QPushButton(_("Previous"))
         self.btn_prev.clicked.connect(self._wizard_prev)
@@ -6213,8 +6223,13 @@ class DicteeSetupDialog(QDialog):
             # Update canary translation visibility when entering translation page
             self._update_canary_translation_visibility()
             if idx + 1 == self.stack.count() - 1:
-                # Entering checks page — save config, start services, verify
-                self._on_apply()
+                # Entering checks page — save config, start services, verify.
+                # mark_setup_done=False : the user hasn't clicked Finish yet,
+                # so we omit DICTEE_SETUP_DONE=true. The merge in save_config()
+                # preserves any existing line (reconfig case stays as-is). On
+                # a true first-run, the absence lets the wizard re-launch if
+                # the user closes without clicking Finish.
+                self._on_apply(mark_setup_done=False)
                 self._run_wizard_checks()
 
     def _validate_wizard_page(self, idx):
@@ -6541,11 +6556,14 @@ class DicteeSetupDialog(QDialog):
 
         # Jump to the last page (test/checks). Same hooks as _wizard_next
         # arriving on the last page: save config and run the wizard checks.
+        # mark_setup_done=False — same reasoning as in _wizard_next: the
+        # user clicked "Use recommended setup" but hasn't validated via
+        # Finish yet. Cf. Option E.
         last = self.stack.count() - 1
         self.stack.setCurrentIndex(last)
         self._update_wizard_nav()
         self._update_canary_translation_visibility()
-        self._on_apply(show_message=False)
+        self._on_apply(show_message=False, mark_setup_done=False)
         self._run_wizard_checks()
 
     # -- Wizard Page 1: ASR --
@@ -16883,7 +16901,7 @@ class DicteeSetupDialog(QDialog):
             btn.setMinimumWidth(orig_min_w)
             btn.setEnabled(True)
 
-    def _on_apply(self, show_message=True):
+    def _on_apply(self, show_message=True, mark_setup_done=True):
         _dbg_setup("_on_apply: saving configuration")
         # Save ALL editor content — user expects Apply to persist
         # every pending change, not just the checkboxes.
@@ -17143,7 +17161,8 @@ class DicteeSetupDialog(QDialog):
                     trpp_states=dict(self._trpp_state),
                     trpp_short_text_max=(
                         self.cmb_trpp_short_text_max.currentData()
-                        if hasattr(self, 'cmb_trpp_short_text_max') else 3) or 3)
+                        if hasattr(self, 'cmb_trpp_short_text_max') else 3) or 3,
+                    mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.
         # - "Same key + <mod>" modes (same_alt / same_ctrl / same_super /
@@ -17457,6 +17476,8 @@ def main():
                "  dictee-setup --debug          Enable debug logging\n")
     parser.add_argument("--wizard", action="store_true",
                         help="Force wizard mode (step-by-step configuration)")
+    parser.add_argument("--first-run", action="store_true",
+                        help="Simulate first-run (wizard + 'Quit setup' visible) — dev/test only")
     parser.add_argument("--postprocess", action="store_true",
                         help="Open post-processing dialog directly")
     parser.add_argument("--translation", action="store_true",
@@ -17574,8 +17595,11 @@ def main():
         # Text and background too similar — force readable contrast
         txt_color = "white" if _win_light < 128 else "black"
         app.setStyleSheet(f"QMessageBox QLabel {{ color: {txt_color}; }}")
-    _dbg_setup(f"wizard={args.wizard}, postprocess={args.postprocess}, translation={args.translation}")
-    dialog = DicteeSetupDialog(wizard=args.wizard, open_postprocess=args.postprocess,
+    _dbg_setup(f"wizard={args.wizard}, first_run={args.first_run}, postprocess={args.postprocess}, translation={args.translation}")
+    # --first-run implies --wizard (simulate the very first launch experience)
+    dialog = DicteeSetupDialog(wizard=args.wizard or args.first_run,
+                               first_run=args.first_run,
+                               open_postprocess=args.postprocess,
                                open_translation=args.translation)
     # All CLI flags (--postprocess, --translation) open the main sidebar
     # window; navigation to the matching entry is handled in showEvent via
