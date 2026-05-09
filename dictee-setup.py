@@ -6326,15 +6326,47 @@ class DicteeSetupDialog(QDialog):
                       "Please click 'Fix' above."))
                 return False
         elif idx == 5:
-            # Translation config page: if libretranslate, user must be in 'docker' group
-            if hasattr(self, 'cmb_translate_backend'):
-                backend = self.cmb_translate_backend.currentData()
-                if backend == "libretranslate":
-                    if not docker_is_accessible() and not getattr(self, '_docker_group_fixed', False):
-                        QMessageBox.warning(self, _("Group required"),
-                            _("Docker permissions are required for LibreTranslate.\n"
-                              "Please click 'Fix permissions' above."))
-                        return False
+            # Translation config page — pre-check that the chosen backend's
+            # binary is actually installed before letting the user move on,
+            # otherwise Apply would later fail silently. The previous check
+            # used `cmb_translate_backend` which doesn't exist in the modern
+            # card-based wizard (the choice is in `_wizard_trans` set by
+            # _on_trans_card_click on page 4).
+            #
+            # Skip all checks if the user opted out via the "No translation"
+            # toggle on page 4.
+            if hasattr(self, '_chk_trans_disabled') and self._chk_trans_disabled.isChecked():
+                return True
+            backend = getattr(self, '_wizard_trans', '')
+            if backend == "libretranslate":
+                # Distinct messages for "docker not installed" vs "docker
+                # installed but not accessible" — the previous single
+                # "Docker permissions" wording was misleading when docker
+                # was simply absent (FileNotFoundError).
+                if not shutil.which("docker"):
+                    QMessageBox.warning(self, _("Docker required"),
+                        _("LibreTranslate needs Docker, which is not installed.\n\n"
+                          "Install via:\n"
+                          "  Debian/Ubuntu: sudo apt install docker.io\n"
+                          "  Fedora: sudo dnf install moby-engine\n"
+                          "  Arch: sudo pacman -S docker\n\n"
+                          "Or pick a different translation backend (Google, Bing, Ollama)."))
+                    return False
+                if not docker_is_accessible() and not getattr(self, '_docker_group_fixed', False):
+                    QMessageBox.warning(self, _("Docker permissions required"),
+                        _("Docker is installed but not accessible. Make sure the\n"
+                          "Docker service is running, and that your user is in\n"
+                          "the 'docker' group. Use the 'Fix permissions' button\n"
+                          "on this page if available."))
+                    return False
+            elif backend == "ollama":
+                if not shutil.which("ollama"):
+                    QMessageBox.warning(self, _("Ollama required"),
+                        _("Ollama is not installed. Install via:\n\n"
+                          "  curl -fsSL https://ollama.com/install.sh | sh\n\n"
+                          "Or pick a different translation backend "
+                          "(Google, Bing, LibreTranslate)."))
+                    return False
         return True
 
     # -- Project logos grid --
