@@ -1084,6 +1084,12 @@ class OllamaPullThread(QThread):
             self.done.emit(False, str(e))
 
 
+# Braille spinner frames — animation tick for "check in flight" icons on
+# the wizard's last page. Mirrors dictee-transcribe.py:4616 SPINNER_FRAMES
+# so the visual idiom is consistent across the suite.
+_CHECK_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
 # === ASR models ===
 
 MODEL_DIR = "/usr/share/dictee"
@@ -7291,7 +7297,11 @@ class DicteeSetupDialog(QDialog):
             ("dotool", _("dotool")),
         ]:
             row = QHBoxLayout()
-            lbl_icon = QLabel("⏳")
+            # First braille frame as initial icon — animated by the timer set
+            # up in _ensure_check_spinner_timer() while a check is in flight
+            # (lbl_status empty). Replaces the previous static ⏳ hourglass
+            # (cf. dictee-transcribe.py:4616 SPINNER_FRAMES — same idiom).
+            lbl_icon = QLabel(_CHECK_SPINNER_FRAMES[0])
             lbl_icon.setFixedWidth(24)
             lbl_name = QLabel(label)
             lbl_status = QLabel()
@@ -14194,6 +14204,33 @@ class DicteeSetupDialog(QDialog):
 
     # ── Wizard checks (page 5) ───────────────────────────────────
 
+    def _ensure_check_spinner_timer(self):
+        """Lazy-init the braille spinner timer used to animate the wizard
+        check icons while a check is in flight. The tick advances the frame
+        on every label whose status is still empty (= pending). Once a
+        check resolves (✓/✗), its icon is replaced and the tick skips it.
+        Stops automatically when no pending labels remain."""
+        if getattr(self, "_check_spinner_timer", None) is not None:
+            return
+        self._check_spinner_frame = 0
+        self._check_spinner_timer = QTimer(self)
+        self._check_spinner_timer.setInterval(100)
+        self._check_spinner_timer.timeout.connect(self._tick_check_spinner)
+
+    def _tick_check_spinner(self):
+        frame = _CHECK_SPINNER_FRAMES[self._check_spinner_frame % len(_CHECK_SPINNER_FRAMES)]
+        self._check_spinner_frame += 1
+        any_pending = False
+        for _cid, (lbl_icon, lbl_status) in self._check_labels.items():
+            # A label is "pending" while its status is still empty — once
+            # _run_wizard_checks fills lbl_status with OK / Not found, it's
+            # done and we stop animating that row.
+            if not lbl_status.text():
+                lbl_icon.setText(frame)
+                any_pending = True
+        if not any_pending:
+            self._check_spinner_timer.stop()
+
     def _run_wizard_checks(self):
         checks = {
             "daemon": self._check_daemon_active,   # service active AND socket ready
@@ -14202,9 +14239,23 @@ class DicteeSetupDialog(QDialog):
             "audio": lambda: len(QMediaDevices.audioInputs()) > 0,
             "dotool": lambda: shutil.which("dotool") is not None,
         }
+        # Reset all labels to pending and start the spinner before running.
+        # Each completed check empties its row's pending state, the spinner
+        # tick stops itself when no rows remain.
+        self._ensure_check_spinner_timer()
+        for _cid, (lbl_icon, lbl_status) in self._check_labels.items():
+            lbl_status.setText("")
+            lbl_icon.setText(_CHECK_SPINNER_FRAMES[0])
+        if not self._check_spinner_timer.isActive():
+            self._check_spinner_timer.start()
+
         all_ok = True
         for check_id, fn in checks.items():
             lbl_icon, lbl_status = self._check_labels[check_id]
+            # Let Qt repaint the spinner between checks so the animation
+            # actually shows up — without this, the synchronous loop
+            # blocks until all checks finish and the user sees nothing.
+            QApplication.processEvents()
             try:
                 ok = fn()
             except Exception:
