@@ -6334,6 +6334,7 @@ class DicteeSetupDialog(QDialog):
         nav.addWidget(self.btn_prev)
 
         self.btn_cancel_wizard = QPushButton(_("Quit setup"))
+        self.btn_cancel_wizard.setStyleSheet("font-weight: bold;")
         self.btn_cancel_wizard.clicked.connect(self.close)
         self.btn_cancel_wizard.setVisible(self._is_first_setup)
         nav.addWidget(self.btn_cancel_wizard)
@@ -6374,7 +6375,9 @@ class DicteeSetupDialog(QDialog):
     def _update_wizard_nav(self):
         idx = self.stack.currentIndex()
         total = self.stack.count()
-        self.btn_prev.setEnabled(idx > 0)
+        # Hide Previous on welcome page (no prior step). Enabled state was
+        # confusing — showing a permanently-disabled button on page 0.
+        self.btn_prev.setVisible(idx > 0)
         # Quick install button: only on welcome page (page 0).
         if hasattr(self, 'btn_quick_install'):
             self.btn_quick_install.setVisible(idx == 0)
@@ -6855,9 +6858,12 @@ class DicteeSetupDialog(QDialog):
         cols.setSpacing(24)
 
         col_det = QVBoxLayout()
-        col_det.setSpacing(4)
-        col_det.addWidget(QLabel("<b>" + _("Detected on your machine:") + "</b>"))
+        col_det.setSpacing(8)
+        det_title = QLabel("<b>" + _("Detected on your machine:") + "</b>")
+        det_title.setStyleSheet("font-size: 15pt; padding-bottom: 4px;")
+        col_det.addWidget(det_title)
         det = QLabel("<br>".join(det_lines))
+        det.setStyleSheet("font-size: 13pt;")
         det.setTextFormat(Qt.TextFormat.RichText)
         det.setWordWrap(True)
         det.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -6865,11 +6871,12 @@ class DicteeSetupDialog(QDialog):
         cols.addLayout(col_det, 1)
 
         col_rec = QVBoxLayout()
-        col_rec.setSpacing(4)
-        col_rec.addWidget(QLabel(
-            "<b style='color: #27ae60;'>" + _("Recommended setup:") + "</b>"))
-        rec = QLabel(
-            "<span style='color: #27ae60;'>" + "<br>".join(rec_lines) + "</span>")
+        col_rec.setSpacing(8)
+        rec_title = QLabel("<b>" + _("Recommended setup:") + "</b>")
+        rec_title.setStyleSheet("font-size: 15pt; color: #27ae60; padding-bottom: 4px;")
+        col_rec.addWidget(rec_title)
+        rec = QLabel("<br>".join(rec_lines))
+        rec.setStyleSheet("font-size: 13pt; color: #27ae60;")
         rec.setTextFormat(Qt.TextFormat.RichText)
         rec.setWordWrap(True)
         rec.setAlignment(Qt.AlignmentFlag.AlignTop)
