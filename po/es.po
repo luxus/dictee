@@ -567,6 +567,16 @@ msgstr ""
 msgid "Translating..."
 msgstr "Traduciendo..."
 
+msgid "Translation skipped: no target language selected."
+msgstr "Traducción omitida: no se ha seleccionado ningún idioma de destino."
+
+msgid ""
+"Translation skipped: source language detected as {src} — select a different "
+"target above."
+msgstr ""
+"Traducción omitida: idioma de origen detectado ({src}) — seleccione un "
+"idioma de destino diferente arriba."
+
 msgid "Generating LLM analysis…"
 msgstr "Generando análisis LLM…"
 

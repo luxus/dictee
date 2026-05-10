@@ -564,6 +564,16 @@ msgstr ""
 msgid "Translating..."
 msgstr "Переклад..."
 
+msgid "Translation skipped: no target language selected."
+msgstr "Переклад пропущено: цільову мову не вибрано."
+
+msgid ""
+"Translation skipped: source language detected as {src} — select a different "
+"target above."
+msgstr ""
+"Переклад пропущено: вихідну мову визначено як {src} — виберіть іншу цільову "
+"мову вище."
+
 msgid "Generating LLM analysis…"
 msgstr "Генерація аналізу LLM…"
 
