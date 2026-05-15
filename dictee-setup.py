@@ -8180,11 +8180,11 @@ class DicteeSetupDialog(QDialog):
         desc_text = _(self._MODEL_DESCRIPTIONS.get(model["id"], ""))
 
         return (
-            f"<p style='margin:0; line-height:1.2;'>"
+            f"<p style='margin:0; line-height:1.3;'>"
             f"<span style='font-size:12pt; font-weight:bold;{inactive_color}'>{title}</span>"
             f"{badge_html}"
             f"<br/>"
-            f"<span style='font-size:9pt;{inactive_color}'>{desc_text}</span>"
+            f"<span style='font-size:10pt;{inactive_color}'>{desc_text}</span>"
             f"</p>"
         )
 
@@ -8202,13 +8202,12 @@ class DicteeSetupDialog(QDialog):
             # User wants CPU. Warn if GPU was capable.
             if total_vram >= 4:
                 msg = ("⚠ " + _("CPU mode forced — losing GPU acceleration "
-                                "({:.1f} GB VRAM available). Parakeet FP32 will "
-                                "be ~6× slower; Canary will be unusably slow.")
-                       .format(total_vram))
+                                "({:.1f} GB VRAM available). Parakeet FP32 "
+                                "will be ~6× slower.").format(total_vram))
                 color = "#d8a000"  # orange warning
             elif total_vram > 0:
                 msg = ("ℹ " + _("CPU mode forced — GPU has only {:.1f} GB VRAM, "
-                                "FP32 likely OOM anyway. int8 on CPU is a "
+                                "FP32 likely OOM anyway. INT8 on CPU is a "
                                 "reasonable fallback.").format(total_vram))
                 color = "#7a7a7a"  # neutral grey
             else:
@@ -8232,7 +8231,7 @@ class DicteeSetupDialog(QDialog):
                 color = "#7a7a7a"
 
         self._lbl_force_cpu_warning.setText(
-            f"<p style='font-size: 9pt; color: {color};'>{msg}</p>")
+            f"<p style='font-size: 10pt; color: {color};'>{msg}</p>")
 
     def _apply_block_opacity(self, widget, opacity):
         """Apply or remove QGraphicsOpacityEffect on a widget.
