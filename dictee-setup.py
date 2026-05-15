@@ -8133,43 +8133,57 @@ class DicteeSetupDialog(QDialog):
         self._refresh_shortcut_combos_labels()
 
     _MODEL_DESCRIPTIONS = {
-        "tdt": "Main transcription model (FP32 full precision). "
-               "Supports 25 languages with native punctuation and capitalization.",
-        "tdt-int8": "Quantized variant. Same 25 languages, ~3.6× smaller, "
-                    "~34 % faster on CPU. Best for CPU-only or low-VRAM GPU.",
+        "tdt": "Full precision. 25 languages with native punctuation and capitalization.",
+        "tdt-int8": "Quantized variant. ~3.6× smaller, ~34 % faster on CPU. "
+                    "Best for CPU-only or low-VRAM GPU.",
         "sortformer": "Speaker diarization add-on. Identifies up to 4 speakers "
                       "in a recording. Optional — only needed for speaker identification.",
     }
 
     def _make_model_label_html(self, model, active_quant, recommended_quant):
-        """Generate HTML for a model's description label, with ★ Recommended and ACTIVE badges."""
-        installed = model_is_installed(model)
-        model_quant = model.get("quant")
-        badges_html = ""
+        """Generate two-line HTML for a model entry:
+          - Line 1: "FP32" or "INT8" (or model name for non-TDT) — bold + ★ Recommended badge
+          - Line 2: description in smaller font
+        Non-active TDT variant is rendered greyed out (color: #888) on both lines."""
+        model_quant = model.get("quant")  # "fp32", "int8", or None
+
+        # Title line: variant code in uppercase for TDT, or full model name otherwise
+        if model_quant:
+            title = model_quant.upper()  # "FP32" or "INT8"
+            is_active = (model_quant == active_quant)
+            inactive_color = " color:#888;" if not is_active else ""
+        else:
+            title = model["name"]
+            is_active = True  # non-TDT models are always "active" (no quant choice)
+            inactive_color = ""
+
+        # ★ Recommended badge on the hardware-suggested variant
+        badge_html = ""
         if model_quant and model_quant == recommended_quant:
-            badges_html += (
+            badge_html = (
                 " <span style='color:#d8a000; font-size:10pt; font-weight:bold;'>★ "
                 + _("Recommended") + "</span>"
             )
-        if model_quant and model_quant == active_quant and installed:
-            badges_html += (
-                " <span style='background:#2a7d3a; color:white; padding:2px 8px;"
-                " border-radius:4px; font-size:10pt; font-weight:bold;'>"
-                + _("ACTIVE") + "</span>"
-            )
+
         desc_text = _(self._MODEL_DESCRIPTIONS.get(model["id"], ""))
-        return (f"<p style='font-size: 11pt;'><b>{model['name']}</b>"
-                f"{badges_html} — {desc_text}</p>")
+
+        return (
+            f"<p style='margin:0; line-height:1.2;'>"
+            f"<span style='font-size:12pt; font-weight:bold;{inactive_color}'>{title}</span>"
+            f"{badge_html}"
+            f"<br/>"
+            f"<span style='font-size:9pt;{inactive_color}'>{desc_text}</span>"
+            f"</p>"
+        )
 
     def _refresh_tdt_active_badge(self):
-        """Live-update ACTIVE badges on TDT model labels + side labels around the
-        toggle switch when the user flips it. Called by ToggleSwitch.toggled,
-        before Apply, so the user gets immediate visual feedback."""
+        """Live-update TDT model labels when the toggle flips: the selected
+        variant stays at full colour, the other goes grey. Called by
+        ToggleSwitch.toggled — no need to wait for Apply."""
         if not hasattr(self, 'tgl_quant'):
             return
         new_active = "int8" if self.tgl_quant.isChecked() else "fp32"
         recommended = suggest_parakeet_quant()
-        # 1) Refresh badges on the 2 TDT model rows
         for model in ASR_MODELS:
             if model.get("quant") not in ("fp32", "int8"):
                 continue
@@ -8177,12 +8191,6 @@ class DicteeSetupDialog(QDialog):
             if widgets and widgets.get("desc_label"):
                 widgets["desc_label"].setText(
                     self._make_model_label_html(model, new_active, recommended))
-        # 2) Bold the side label of the currently-selected variant
-        if hasattr(self, '_lbl_toggle_fp32') and hasattr(self, '_lbl_toggle_int8'):
-            self._lbl_toggle_fp32.setText(
-                "<b>FP32</b>" if new_active == "fp32" else "FP32")
-            self._lbl_toggle_int8.setText(
-                "<b>INT8</b>" if new_active == "int8" else "INT8")
 
     def _build_parakeet_options(self, parent_layout):
         """Build Parakeet + Sortformer model download UI.
@@ -8260,8 +8268,9 @@ class DicteeSetupDialog(QDialog):
                 "btn_cancel": btn_cancel, "progress": progress, "model": model,
             }
 
-        # === Parakeet group box ===
-        parakeet_box = QGroupBox(_("Parakeet TDT — Main transcription model"))
+        # === Parakeet group box (no subtitle — the ASR backend combobox already
+        # identifies the model family). Just "Parakeet TDT" as section anchor. ===
+        parakeet_box = QGroupBox(_("Parakeet TDT"))
         parakeet_lay = QVBoxLayout(parakeet_box)
         parakeet_lay.setContentsMargins(12, 12, 12, 10)
         parakeet_lay.setSpacing(6)
@@ -8278,18 +8287,15 @@ class DicteeSetupDialog(QDialog):
         )
 
         # Toggle switch: unchecked = FP32 (left), checked = INT8 (right).
-        # Layout: "Active variant:    FP32 [——●] INT8"   (bold side = selected)
+        # The variants above are greyed out when not selected, so the toggle
+        # state is visually obvious without extra side labels.
         toggle_row = QHBoxLayout()
         toggle_row.setContentsMargins(0, 6, 0, 0)
         toggle_row.addWidget(QLabel("<b>" + _("Active variant:") + "</b>"))
         toggle_row.addSpacing(12)
+        toggle_row.addWidget(QLabel("FP32"))
 
-        self._lbl_toggle_fp32 = QLabel(
-            "<b>FP32</b>" if active_quant == "fp32" else "FP32")
-        self._lbl_toggle_fp32.setStyleSheet("QLabel { font-size: 11pt; }")
-        toggle_row.addWidget(self._lbl_toggle_fp32)
-
-        self.tgl_quant = ToggleSwitch("")  # standalone toggle, labels are external
+        self.tgl_quant = ToggleSwitch("")
         self.tgl_quant.setChecked(active_quant == "int8")
         # Enable only if BOTH variants are installed; otherwise auto-resolved + disabled
         both_installed = fp32_installed and int8_installed
@@ -8298,15 +8304,10 @@ class DicteeSetupDialog(QDialog):
             self.tgl_quant.setChecked(False)
         elif int8_installed and not fp32_installed:
             self.tgl_quant.setChecked(True)
-        # Live refresh of ACTIVE badge and side-label bolding
         self.tgl_quant.toggled.connect(self._refresh_tdt_active_badge)
         toggle_row.addWidget(self.tgl_quant)
 
-        self._lbl_toggle_int8 = QLabel(
-            "<b>INT8</b>" if active_quant == "int8" else "INT8")
-        self._lbl_toggle_int8.setStyleSheet("QLabel { font-size: 11pt; }")
-        toggle_row.addWidget(self._lbl_toggle_int8)
-
+        toggle_row.addWidget(QLabel("INT8"))
         toggle_row.addStretch()
         parakeet_lay.addLayout(toggle_row)
 
@@ -8328,8 +8329,8 @@ class DicteeSetupDialog(QDialog):
 
         lay_outer.addWidget(parakeet_box)
 
-        # === Sortformer group box (separate) ===
-        sortformer_box = QGroupBox(_("Sortformer — Speaker diarization (optional)"))
+        # === Sortformer group box (separate, simple title) ===
+        sortformer_box = QGroupBox(_("Sortformer"))
         sortformer_lay = QVBoxLayout(sortformer_box)
         sortformer_lay.setContentsMargins(12, 12, 12, 10)
         sortformer_lay.setSpacing(6)
