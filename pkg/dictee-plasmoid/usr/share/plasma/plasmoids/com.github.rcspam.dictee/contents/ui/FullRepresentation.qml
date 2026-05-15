@@ -875,9 +875,39 @@ RowLayout {
                 if (syncing) return
                 executable.run("dictee-switch-backend force_cpu " + (checked ? "1" : "0"))
             }
-            QQC2.ToolTip.text: checked
-                ? i18n("Force CPU — disables GPU for all ASR backends (slower but useful on battery or shared GPU)")
-                : i18n("GPU acceleration is used when available")
+            // Dynamic tooltip: 6 cases (forcing × VRAM tier). Mirrors the
+            // Python _force_cpu_warning() in dictee-tray.py and the
+            // _refresh_force_cpu_warning() in dictee-setup.py — keep wording
+            // consistent across the three UIs.
+            function _forceCpuWarning() {
+                var vram = root.gpuVramGb
+                if (forceCpuSwitch.checked) {
+                    if (vram >= 4) {
+                        return i18n("⚠ CPU mode forced — losing GPU acceleration "
+                                    + "(%1 GB VRAM available). Parakeet FP32 "
+                                    + "will be ~6× slower.").arg(vram.toFixed(1))
+                    }
+                    if (vram > 0) {
+                        return i18n("ℹ CPU mode forced — GPU has only %1 GB VRAM, "
+                                    + "FP32 likely OOM anyway. INT8 on CPU is a "
+                                    + "reasonable fallback.").arg(vram.toFixed(1))
+                    }
+                    return i18n("ℹ No GPU detected — CPU is the only option "
+                                + "(this toggle is a no-op).")
+                }
+                if (vram >= 4) {
+                    return i18n("✓ GPU acceleration enabled "
+                                + "(%1 GB VRAM detected).").arg(vram.toFixed(1))
+                }
+                if (vram > 0) {
+                    return i18n("⚠ GPU has only %1 GB VRAM — Parakeet FP32 may "
+                                + "OOM at load. Consider toggling CPU or using "
+                                + "INT8.").arg(vram.toFixed(1))
+                }
+                return i18n("ℹ No GPU detected — running on CPU regardless of "
+                            + "this toggle.")
+            }
+            QQC2.ToolTip.text: _forceCpuWarning()
             QQC2.ToolTip.visible: hovered
             QQC2.ToolTip.delay: 500
         }
