@@ -578,17 +578,29 @@ RowLayout {
         QQC2.ComboBox {
             id: asrCombo
             Kirigami.Theme.inherit: true
+            // Parakeet has two variants visible as separate entries (cosmetic
+            // split — same backend, different quantization). When the user
+            // picks one, we switch backend AND quantization.
             model: ListModel {
                 id: asrModel
-                ListElement { text: "Parakeet"; value: "parakeet" }
-                ListElement { text: "Canary"; value: "canary" }
-                ListElement { text: "Vosk"; value: "vosk" }
-                ListElement { text: "Whisper"; value: "whisper" }
+                ListElement { text: "Parakeet (full)"; value: "parakeet"; quant: "fp32" }
+                ListElement { text: "Parakeet (light)"; value: "parakeet"; quant: "int8" }
+                ListElement { text: "Canary"; value: "canary"; quant: "" }
+                ListElement { text: "Vosk"; value: "vosk"; quant: "" }
+                ListElement { text: "Whisper"; value: "whisper"; quant: "" }
             }
             textRole: "text"
             function syncIndex() {
+                // Match both backend AND (for Parakeet) the active quantization
                 for (var i = 0; i < asrModel.count; i++) {
-                    if (asrModel.get(i).value === root.currentAsrBackend) {
+                    var item = asrModel.get(i)
+                    if (item.value !== root.currentAsrBackend) continue
+                    if (item.value === "parakeet") {
+                        if (item.quant === root.currentParakeetQuant) {
+                            currentIndex = i
+                            return
+                        }
+                    } else {
                         currentIndex = i
                         return
                     }
@@ -599,6 +611,7 @@ RowLayout {
             Connections {
                 target: root
                 function onCurrentAsrBackendChanged() { asrCombo.syncIndex() }
+                function onCurrentParakeetQuantChanged() { asrCombo.syncIndex() }
             }
             delegate: QQC2.ItemDelegate {
                 width: parent ? parent.width : 0
@@ -607,14 +620,19 @@ RowLayout {
                 opacity: enabled ? 1.0 : 0.4
             }
             onActivated: function(index) {
-                var val = asrModel.get(index).value
-                if (root.installedAsr.indexOf(val) !== -1) {
-                    executable.run("dictee-switch-backend asr " + val)
-                } else {
+                var item = asrModel.get(index)
+                if (root.installedAsr.indexOf(item.value) === -1) {
                     syncIndex()
+                    return
+                }
+                // Switch backend; if Parakeet, also switch quantization
+                executable.run("dictee-switch-backend asr " + item.value)
+                if (item.value === "parakeet" && item.quant !== "" &&
+                        item.quant !== root.currentParakeetQuant) {
+                    executable.run("dictee-switch-backend quant " + item.quant)
                 }
             }
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
         }
 
         QQC2.CheckBox {
@@ -809,6 +827,55 @@ RowLayout {
             QQC2.ToolTip.visible: hovered
             QQC2.ToolTip.delay: 500
         }
+    }
+
+    // GPU / CPU toggle row — applies to all ASR backends.
+    // Placed just above the Action buttons (Transcribe file / Configure
+    // Dictée) so it doesn't crowd the ASR combo row.
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: Kirigami.Units.smallSpacing
+        visible: fullRep.dicteeConfigured
+
+        Item { Layout.fillWidth: true }
+
+        PlasmaComponents.Label {
+            text: "GPU"
+            Layout.alignment: Qt.AlignVCenter
+            opacity: forceCpuSwitch.checked ? 0.5 : 1.0
+        }
+
+        QQC2.Switch {
+            id: forceCpuSwitch
+            checked: root.forceCpuActive
+            // Avoid emitting onToggled during state sync from main.qml
+            property bool syncing: false
+            Connections {
+                target: root
+                function onForceCpuActiveChanged() {
+                    forceCpuSwitch.syncing = true
+                    forceCpuSwitch.checked = root.forceCpuActive
+                    forceCpuSwitch.syncing = false
+                }
+            }
+            onToggled: {
+                if (syncing) return
+                executable.run("dictee-switch-backend force_cpu " + (checked ? "1" : "0"))
+            }
+            QQC2.ToolTip.text: checked
+                ? i18n("Force CPU — disables GPU for all ASR backends (slower but useful on battery or shared GPU)")
+                : i18n("GPU acceleration is used when available")
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: 500
+        }
+
+        PlasmaComponents.Label {
+            text: "CPU"
+            Layout.alignment: Qt.AlignVCenter
+            opacity: forceCpuSwitch.checked ? 1.0 : 0.5
+        }
+
+        Item { Layout.fillWidth: true }
     }
 
     // Actions + Preview

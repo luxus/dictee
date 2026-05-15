@@ -162,6 +162,14 @@ PlasmoidItem {
                 if (parts.length >= 11) {
                     root.pttKey = _pttLabel(parts[10] || "67")
                 }
+                if (parts.length >= 12) {
+                    var q = (parts[11] || "fp32").toLowerCase()
+                    root.currentParakeetQuant = (q === "int8") ? "int8" : "fp32"
+                }
+                if (parts.length >= 13) {
+                    var fc = (parts[12] || "0").toLowerCase()
+                    root.forceCpuActive = (fc === "1" || fc === "true" || fc === "yes")
+                }
             } else if (source.indexOf("dictee-translate-langs") !== -1) {
                 var langs = stdout.trim()
                 var newList = langs.length > 0 ? langs.split(",") : []
@@ -321,7 +329,7 @@ PlasmoidItem {
     property string currentLangTarget: "en"
     property var availableLangTarget: []
     property real backendUserChangeTime: 0  // timestamp of last user-initiated backend change
-    property string readConfCmd: "bash -c 'source \"${XDG_CONFIG_HOME:-$HOME/.config}/dictee.conf\" 2>/dev/null; echo \"$DICTEE_ASR_BACKEND|$DICTEE_TRANSLATE_BACKEND|$DICTEE_TRANS_ENGINE|$DICTEE_AUDIO_SOURCE|$DICTEE_LANG_TARGET|$DICTEE_LANG_SOURCE|$DICTEE_AUDIO_CONTEXT|$DICTEE_PP_SHORT_TEXT|$DICTEE_TRPP_SHORT_TEXT|$DICTEE_LLM_POSTPROCESS|$DICTEE_PTT_KEY\"'"
+    property string readConfCmd: "bash -c 'source \"${XDG_CONFIG_HOME:-$HOME/.config}/dictee.conf\" 2>/dev/null; echo \"$DICTEE_ASR_BACKEND|$DICTEE_TRANSLATE_BACKEND|$DICTEE_TRANS_ENGINE|$DICTEE_AUDIO_SOURCE|$DICTEE_LANG_TARGET|$DICTEE_LANG_SOURCE|$DICTEE_AUDIO_CONTEXT|$DICTEE_PP_SHORT_TEXT|$DICTEE_TRPP_SHORT_TEXT|$DICTEE_LLM_POSTPROCESS|$DICTEE_PTT_KEY|$DICTEE_PARAKEET_QUANT|$DICTEE_FORCE_CPU\"'"
     property string pttKey: "F9"
     // Map evdev keycode (DICTEE_PTT_KEY) to a human label. Covers F1..F24 +
     // common keys; unknown codes fall back to "key{kc}". Mirrors the table
@@ -342,6 +350,8 @@ PlasmoidItem {
     property bool audioContextEnabled: false
     property bool shortTextEnabled: true
     property bool llmPostprocessEnabled: false
+    property string currentParakeetQuant: "fp32"  // "fp32" or "int8" — Parakeet model variant
+    property bool forceCpuActive: false           // DICTEE_FORCE_CPU=1 → true
     property string currentAudioSource: ""
     property var audioSourceList: []
     property string listAudioSourcesCmd: "dictee-audio-sources"
