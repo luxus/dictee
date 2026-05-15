@@ -4201,3 +4201,23 @@ msgstr ""
 
 #~ msgid "click to stop"
 #~ msgstr "cliquer pour arrêter"
+
+#: dictee-tray.py
+msgid "Parakeet (more precise)"
+msgstr "Parakeet (plus précis)"
+
+#: dictee-tray.py
+msgid "Parakeet (faster)"
+msgstr "Parakeet (plus rapide)"
+
+#: dictee-tray.py
+msgid "Force CPU (no GPU)"
+msgstr "Forcer CPU (pas de GPU)"
+
+#: dictee-tray.py
+msgid ""
+"Disable GPU acceleration for all ASR backends. Useful on battery or when "
+"the GPU is shared with other apps."
+msgstr ""
+"Désactive l'accélération GPU pour tous les backends ASR. Utile sur batterie "
+"ou quand le GPU est partagé avec d'autres applications."

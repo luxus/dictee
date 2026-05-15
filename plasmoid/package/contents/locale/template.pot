@@ -536,9 +536,9 @@ msgid "Switching backend…"
 msgstr ""
 
 #: package/contents/ui/FullRepresentation.qml
-msgid "Parakeet (precision)"
+msgid "Parakeet (more precise)"
 msgstr ""
 
 #: package/contents/ui/FullRepresentation.qml
-msgid "Parakeet (fast)"
+msgid "Parakeet (faster)"
 msgstr ""

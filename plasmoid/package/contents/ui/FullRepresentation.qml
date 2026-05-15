@@ -586,8 +586,8 @@ RowLayout {
             model: ListModel {
                 id: asrModel
                 Component.onCompleted: {
-                    append({ "text": i18n("Parakeet (precision)"), "value": "parakeet", "quant": "fp32" })
-                    append({ "text": i18n("Parakeet (fast)"),       "value": "parakeet", "quant": "int8" })
+                    append({ "text": i18n("Parakeet (more precise)"), "value": "parakeet", "quant": "fp32" })
+                    append({ "text": i18n("Parakeet (faster)"),       "value": "parakeet", "quant": "int8" })
                     append({ "text": "Canary",   "value": "canary",  "quant": "" })
                     append({ "text": "Vosk",     "value": "vosk",    "quant": "" })
                     append({ "text": "Whisper",  "value": "whisper", "quant": "" })
@@ -833,27 +833,36 @@ RowLayout {
         }
     }
 
-    // GPU / CPU toggle row — applies to all ASR backends.
-    // Placed just above the Action buttons (Transcribe file / Configure
-    // Dictée) so it doesn't crowd the ASR combo row.
+    // Actions + Preview — also hosts the GPU/CPU toggle in-line, so the
+    // toggle sits on the same row as the action buttons (compact layout).
     RowLayout {
         Layout.fillWidth: true
         spacing: Kirigami.Units.smallSpacing
-        visible: fullRep.dicteeConfigured
+
+        ThemedButton {
+            text: i18n("Transcribe file")
+            icon.name: "document-open"
+            flat: true
+            onClicked: fullRep.actionRequested("transcribe-file")
+            tooltipText: i18n("Open an audio file for transcription")
+        }
 
         Item { Layout.fillWidth: true }
 
+        // GPU / CPU toggle (visible once dictee is configured). Both side
+        // labels stay at full opacity — the slider position alone signals
+        // the active mode.
         PlasmaComponents.Label {
             text: "GPU"
             Layout.alignment: Qt.AlignVCenter
-            opacity: forceCpuSwitch.checked ? 0.5 : 1.0
+            visible: fullRep.dicteeConfigured
         }
 
         QQC2.Switch {
             id: forceCpuSwitch
+            visible: fullRep.dicteeConfigured
             checked: root.forceCpuActive
-            // Avoid emitting onToggled during state sync from main.qml
-            property bool syncing: false
+            property bool syncing: false  // skip onToggled when syncing from main.qml
             Connections {
                 target: root
                 function onForceCpuActiveChanged() {
@@ -876,26 +885,10 @@ RowLayout {
         PlasmaComponents.Label {
             text: "CPU"
             Layout.alignment: Qt.AlignVCenter
-            opacity: forceCpuSwitch.checked ? 1.0 : 0.5
+            visible: fullRep.dicteeConfigured
         }
 
-        Item { Layout.fillWidth: true }
-    }
-
-    // Actions + Preview
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
-
-        ThemedButton {
-            text: i18n("Transcribe file")
-            icon.name: "document-open"
-            flat: true
-            onClicked: fullRep.actionRequested("transcribe-file")
-            tooltipText: i18n("Open an audio file for transcription")
-        }
-
-        Item { Layout.fillWidth: true }
+        Item { Layout.preferredWidth: Kirigami.Units.largeSpacing; visible: fullRep.dicteeConfigured }
 
         ThemedButton {
             text: i18n("Configure Dictée")

@@ -189,11 +189,22 @@ def _ptt_label():
         return str(raw) if raw else "F9"
 
 
+# ASR backends shown in the tray menu.
+# Format: (menu_id, label_msgid, backend_key, quant)
+# - menu_id is unique per menu entry (Parakeet appears twice — one entry
+#   per quantization variant).
+# - label_msgid is the English string passed through _() at menu build time.
+# - backend_key is what dictee-switch-backend expects (parakeet/canary/vosk/whisper).
+# - quant is "fp32" or "int8" for Parakeet variants, None otherwise. When set,
+#   selecting this entry also triggers `dictee-switch-backend quant <quant>`.
+# Note: label_msgid is NOT pre-translated at module load (gettext may not be
+# initialised yet). _() is called when the menu is constructed.
 ASR_BACKENDS = [
-    ("parakeet", "Parakeet"),
-    ("canary", "Canary"),
-    ("vosk", "Vosk"),
-    ("whisper", "Whisper"),
+    ("parakeet-fp32", "Parakeet (more precise)", "parakeet", "fp32"),
+    ("parakeet-int8", "Parakeet (faster)",       "parakeet", "int8"),
+    ("canary",        "Canary",                  "canary",   None),
+    ("vosk",          "Vosk",                    "vosk",     None),
+    ("whisper",       "Whisper",                 "whisper",  None),
 ]
 
 TRANSLATE_BACKENDS = [
@@ -554,13 +565,14 @@ class DicteeTrayAppIndicator:
 
         self._asr_radios = []
         group = None
-        for key, label in ASR_BACKENDS:
-            item = Gtk.RadioMenuItem(label=label, group=group)
+        for menu_id, label_msgid, backend, quant in ASR_BACKENDS:
+            item = Gtk.RadioMenuItem(label=_(label_msgid), group=group)
             if group is None:
                 group = item
-            item.connect("toggled", self._on_asr_toggled, key)
+            # Pass backend + quant so _on_asr_toggled emits both commands when needed
+            item.connect("toggled", self._on_asr_toggled, backend, quant)
             self.submenu_asr.append(item)
-            self._asr_radios.append((key, item))
+            self._asr_radios.append((menu_id, backend, quant, item))
 
         # Translate backend submenu
         self.submenu_trans = Gtk.Menu()
@@ -635,6 +647,16 @@ class DicteeTrayAppIndicator:
         self.item_short_gtk.connect("toggled", self._on_short_toggled_gtk)
         self.menu.append(self.item_short_gtk)
 
+        # Force CPU toggle (applies to all ASR backends)
+        self.item_force_cpu_gtk = Gtk.CheckMenuItem(label=_("Force CPU (no GPU)"))
+        _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
+        self.item_force_cpu_gtk.set_active(_fc in ("1", "true", "yes"))
+        self.item_force_cpu_gtk.set_tooltip_text(
+            _("Disable GPU acceleration for all ASR backends. "
+              "Useful on battery or when the GPU is shared with other apps."))
+        self.item_force_cpu_gtk.connect("toggled", self._on_force_cpu_toggled_gtk)
+        self.menu.append(self.item_force_cpu_gtk)
+
         self.menu.append(Gtk.SeparatorMenuItem())
 
         item_cheatsheet = Gtk.MenuItem(label=_("Toggle voice commands cheatsheet"))
@@ -684,6 +706,11 @@ class DicteeTrayAppIndicator:
             pp_st = read_conf_value("DICTEE_PP_SHORT_TEXT", "true").lower() == "true"
             trpp_st = read_conf_value("DICTEE_TRPP_SHORT_TEXT", "true").lower() == "true"
             _set(self.item_short_gtk, pp_st or trpp_st, self._on_short_toggled_gtk)
+        if hasattr(self, "item_force_cpu_gtk"):
+            _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
+            _set(self.item_force_cpu_gtk,
+                 _fc in ("1", "true", "yes"),
+                 self._on_force_cpu_toggled_gtk)
 
     def _on_daemon_toggle(self, _item):
         if self.state == "offline":
@@ -828,9 +855,14 @@ class DicteeTrayAppIndicator:
         self._setup_file_watch()
         return True  # GLib.SOURCE_CONTINUE
 
-    def _on_asr_toggled(self, item, key):
+    def _on_asr_toggled(self, item, backend, quant):
         if item.get_active():
-            subprocess.Popen(["dictee-switch-backend", "asr", key])
+            subprocess.Popen(["dictee-switch-backend", "asr", backend])
+            # For Parakeet, also switch quantization variant if needed
+            if quant in ("fp32", "int8"):
+                current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+                if current_q != quant:
+                    subprocess.Popen(["dictee-switch-backend", "quant", quant])
             from gi.repository import GLib
             GLib.timeout_add(2000, self._delayed_daemon_refresh)
 
@@ -862,6 +894,12 @@ class DicteeTrayAppIndicator:
         val = "true" if item.get_active() else "false"
         subprocess.Popen(["dictee-switch-backend", "short_text", val])
 
+    def _on_force_cpu_toggled_gtk(self, item):
+        val = "1" if item.get_active() else "0"
+        subprocess.Popen(["dictee-switch-backend", "force_cpu", val])
+        from gi.repository import GLib
+        GLib.timeout_add(2000, self._delayed_daemon_refresh)
+
     def _delayed_daemon_refresh(self):
         self._check_daemon()
         self._check_state()
@@ -870,10 +908,19 @@ class DicteeTrayAppIndicator:
 
     def _refresh_backend_radios(self):
         current_asr = _current_asr_backend()
-        for key, item in self._asr_radios:
+        current_quant = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+        if current_quant not in ("fp32", "int8"):
+            current_quant = "fp32"
+        for menu_id, backend, quant, item in self._asr_radios:
             item.handler_block_by_func(self._on_asr_toggled)
-            item.set_active(key == current_asr)
-            item.set_sensitive(_asr_service_exists(key))
+            # An entry is "active" when its backend matches AND (for Parakeet)
+            # its quant matches the conf value.
+            if quant in ("fp32", "int8"):
+                active = (backend == current_asr and quant == current_quant)
+            else:
+                active = (backend == current_asr)
+            item.set_active(active)
+            item.set_sensitive(_asr_service_exists(backend))
             item.handler_unblock_by_func(self._on_asr_toggled)
 
         # Disable translation submenu when using canary (built-in translation)
@@ -973,13 +1020,16 @@ class DicteeTrayQt:
         self.menu_asr.aboutToShow.connect(self._refresh_asr_menu)
         self._asr_group = QActionGroup(self.menu_asr)
         self._asr_group.setExclusive(True)
+        # Map menu_id → (action, backend, quant) — supports 2 Parakeet entries
         self._asr_actions = {}
-        for key, label in ASR_BACKENDS:
-            action = self.menu_asr.addAction(label)
+        for menu_id, label_msgid, backend, quant in ASR_BACKENDS:
+            action = self.menu_asr.addAction(_(label_msgid))
             action.setCheckable(True)
-            action.setData(key)
+            # Stash (backend, quant) on the action so the triggered handler
+            # knows both pieces without looking up the dict.
+            action.setData({"backend": backend, "quant": quant, "menu_id": menu_id})
             self._asr_group.addAction(action)
-            self._asr_actions[key] = action
+            self._asr_actions[menu_id] = action
         self._asr_group.triggered.connect(self._on_asr_selected)
 
         # Translate backend submenu
@@ -1052,6 +1102,17 @@ class DicteeTrayQt:
             _("Enable short-text fix on both normal and translation pipelines."))
         self.action_short_qt.toggled.connect(self._on_short_toggled_qt)
 
+        # Force CPU toggle (applies to all ASR backends; restarts the daemon
+        # so the change takes effect immediately).
+        self.action_force_cpu_qt = self.menu.addAction(_("Force CPU (no GPU)"))
+        self.action_force_cpu_qt.setCheckable(True)
+        _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
+        self.action_force_cpu_qt.setChecked(_fc in ("1", "true", "yes"))
+        self.action_force_cpu_qt.setToolTip(
+            _("Disable GPU acceleration for all ASR backends. "
+              "Useful on battery or when the GPU is shared with other apps."))
+        self.action_force_cpu_qt.toggled.connect(self._on_force_cpu_toggled_qt)
+
         self.menu.addSeparator()
         self.action_cheatsheet = self.menu.addAction(_("Toggle voice commands cheatsheet"))
         self.action_setup = self.menu.addAction(_("Configure Dictée"))
@@ -1115,8 +1176,15 @@ class DicteeTrayQt:
                 self._cancel()
 
     def _on_asr_selected(self, action):
-        key = action.data()
-        subprocess.Popen(["dictee-switch-backend", "asr", key])
+        data = action.data() or {}
+        backend = data.get("backend", "parakeet")
+        quant = data.get("quant")
+        subprocess.Popen(["dictee-switch-backend", "asr", backend])
+        # For Parakeet, also switch quantization variant if it differs
+        if quant in ("fp32", "int8"):
+            current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+            if current_q != quant:
+                subprocess.Popen(["dictee-switch-backend", "quant", quant])
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(2000, self._delayed_daemon_refresh)
 
@@ -1147,6 +1215,12 @@ class DicteeTrayQt:
         val = "true" if checked else "false"
         subprocess.Popen(["dictee-switch-backend", "short_text", val])
 
+    def _on_force_cpu_toggled_qt(self, checked):
+        val = "1" if checked else "0"
+        subprocess.Popen(["dictee-switch-backend", "force_cpu", val])
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(2000, self._delayed_daemon_refresh)
+
     def _refresh_menu_toggles_qt(self):
         """Re-read dictee.conf and sync the 3 toggles (context, LLM, short-text).
 
@@ -1170,6 +1244,9 @@ class DicteeTrayQt:
             pp_st = read_conf_value("DICTEE_PP_SHORT_TEXT", "true").lower() == "true"
             trpp_st = read_conf_value("DICTEE_TRPP_SHORT_TEXT", "true").lower() == "true"
             _set(self.action_short_qt, pp_st or trpp_st)
+        if hasattr(self, "action_force_cpu_qt"):
+            _set(self.action_force_cpu_qt,
+                 read_conf_value("DICTEE_FORCE_CPU", "0").lower() in ("1", "true", "yes"))
 
     def _delayed_daemon_refresh(self):
         self._check_daemon()
@@ -1178,9 +1255,19 @@ class DicteeTrayQt:
 
     def _refresh_asr_menu(self):
         current = _current_asr_backend()
-        for key, action in self._asr_actions.items():
-            action.setChecked(key == current)
-            action.setEnabled(_asr_service_exists(key))
+        current_quant = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+        if current_quant not in ("fp32", "int8"):
+            current_quant = "fp32"
+        for menu_id, action in self._asr_actions.items():
+            data = action.data() or {}
+            backend = data.get("backend", menu_id)
+            quant = data.get("quant")
+            if quant in ("fp32", "int8"):
+                checked = (backend == current and quant == current_quant)
+            else:
+                checked = (backend == current)
+            action.setChecked(checked)
+            action.setEnabled(_asr_service_exists(backend))
 
     def _refresh_trans_menu(self):
         # Disable when using canary (built-in translation)
