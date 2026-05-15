@@ -8157,12 +8157,13 @@ class DicteeSetupDialog(QDialog):
             is_active = True  # non-TDT models are always "active" (no quant choice)
             inactive_color = ""
 
-        # ★ Recommended badge on the hardware-suggested variant
+        # ★ Recommended for your hardware — badge on the hardware-suggested variant.
+        # The hardware reason (CPU / GPU VRAM) is set as the QLabel tooltip below.
         badge_html = ""
         if model_quant and model_quant == recommended_quant:
             badge_html = (
                 " <span style='color:#d8a000; font-size:10pt; font-weight:bold;'>★ "
-                + _("Recommended") + "</span>"
+                + _("Recommended for your hardware") + "</span>"
             )
 
         desc_text = _(self._MODEL_DESCRIPTIONS.get(model["id"], ""))
@@ -8331,7 +8332,8 @@ class DicteeSetupDialog(QDialog):
         toggle_row.addStretch()  # right padding to center
         parakeet_lay.addLayout(toggle_row)
 
-        # Hardware recommendation footer
+        # Set the hardware-reason as tooltip on the recommended variant's
+        # description label (visible on hover, keeps the UI compact).
         total_vram, _free = get_gpu_vram_gb()
         if total_vram >= 4:
             reason = _("GPU with {:.1f} GB VRAM detected — FP32 is fastest on CUDA").format(total_vram)
@@ -8339,14 +8341,12 @@ class DicteeSetupDialog(QDialog):
             reason = _("GPU with only {:.1f} GB VRAM — FP32 may OOM, int8 fits").format(total_vram)
         else:
             reason = _("No GPU detected — int8 is ~34 % faster on CPU (AVX-VNNI)")
-        lbl_reco = QLabel(
-            # Same orange as the ★ Recommended badge on the variant row for visual link
-            f"<p style='font-size: 9pt; color: #d8a000; padding-left: 4px;'>★ "
-            + _("Recommended for your hardware:")
-            + f" <b>{recommended_quant.upper()}</b> &mdash; {reason}</p>"
-        )
-        lbl_reco.setWordWrap(True)
-        parakeet_lay.addWidget(lbl_reco)
+        for model in ASR_MODELS:
+            if model.get("quant") == recommended_quant:
+                widgets = self._model_widgets.get(model["id"])
+                if widgets and widgets.get("desc_label"):
+                    widgets["desc_label"].setToolTip(reason)
+                break
 
         lay_outer.addWidget(parakeet_box)
 
