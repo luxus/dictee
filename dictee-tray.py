@@ -215,6 +215,51 @@ TRANSLATE_BACKENDS = [
 ]
 
 
+def _detect_gpu_vram_gb():
+    """Return total NVIDIA VRAM in GB, or 0.0 if no GPU / nvidia-smi missing.
+    Same probe as dictee-setup.py's get_gpu_vram_gb() (NVIDIA only — AMD path
+    not needed here since the Force CPU warning is just informative)."""
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            mb = int(r.stdout.strip().split("\n")[0].split(",")[0].strip())
+            return round(mb / 1024, 1)
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, IndexError):
+        pass
+    return 0.0
+
+
+def _force_cpu_warning(forcing_cpu, vram_gb):
+    """Return a one-line warning message for the Force CPU toggle, given
+    the toggle state and detected GPU VRAM.
+
+    Mirrors the 6-case logic from dictee-setup.py's _refresh_force_cpu_warning
+    so the wording stays consistent across setup / tray / plasmoid."""
+    if forcing_cpu:
+        if vram_gb >= 4:
+            return _("⚠ CPU mode forced — losing GPU acceleration "
+                     "({:.1f} GB VRAM available). Parakeet FP32 will "
+                     "be ~6× slower.").format(vram_gb)
+        if vram_gb > 0:
+            return _("ℹ CPU mode forced — GPU has only {:.1f} GB VRAM, "
+                     "FP32 likely OOM anyway. INT8 on CPU is a reasonable "
+                     "fallback.").format(vram_gb)
+        return _("ℹ No GPU detected — CPU is the only option "
+                 "(this toggle is a no-op).")
+    # Not forcing CPU
+    if vram_gb >= 4:
+        return _("✓ GPU acceleration enabled "
+                 "({:.1f} GB VRAM detected).").format(vram_gb)
+    if vram_gb > 0:
+        return _("⚠ GPU has only {:.1f} GB VRAM — Parakeet FP32 may OOM "
+                 "at load. Consider toggling CPU or using INT8.").format(vram_gb)
+    return _("ℹ No GPU detected — running on CPU regardless of this toggle.")
+
+
 def _sortformer_available():
     """Check if the Sortformer diarization model is installed."""
     dd = os.path.join(
@@ -647,13 +692,15 @@ class DicteeTrayAppIndicator:
         self.item_short_gtk.connect("toggled", self._on_short_toggled_gtk)
         self.menu.append(self.item_short_gtk)
 
-        # Force CPU toggle (applies to all ASR backends)
+        # Force CPU toggle (applies to all ASR backends). Tooltip is dynamic
+        # — refreshed on every menu popup by the Gtk equivalent of
+        # _refresh_menu_toggles_qt with the right 6-case message.
         self.item_force_cpu_gtk = Gtk.CheckMenuItem(label=_("Force CPU (no GPU)"))
         _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
-        self.item_force_cpu_gtk.set_active(_fc in ("1", "true", "yes"))
+        _initial_force = _fc in ("1", "true", "yes")
+        self.item_force_cpu_gtk.set_active(_initial_force)
         self.item_force_cpu_gtk.set_tooltip_text(
-            _("Disable GPU acceleration for all ASR backends. "
-              "Useful on battery or when the GPU is shared with other apps."))
+            _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
         self.item_force_cpu_gtk.connect("toggled", self._on_force_cpu_toggled_gtk)
         self.menu.append(self.item_force_cpu_gtk)
 
@@ -708,9 +755,10 @@ class DicteeTrayAppIndicator:
             _set(self.item_short_gtk, pp_st or trpp_st, self._on_short_toggled_gtk)
         if hasattr(self, "item_force_cpu_gtk"):
             _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
-            _set(self.item_force_cpu_gtk,
-                 _fc in ("1", "true", "yes"),
-                 self._on_force_cpu_toggled_gtk)
+            _forcing = _fc in ("1", "true", "yes")
+            _set(self.item_force_cpu_gtk, _forcing, self._on_force_cpu_toggled_gtk)
+            self.item_force_cpu_gtk.set_tooltip_text(
+                _force_cpu_warning(_forcing, _detect_gpu_vram_gb()))
 
     def _on_daemon_toggle(self, _item):
         if self.state == "offline":
@@ -1103,14 +1151,16 @@ class DicteeTrayQt:
         self.action_short_qt.toggled.connect(self._on_short_toggled_qt)
 
         # Force CPU toggle (applies to all ASR backends; restarts the daemon
-        # so the change takes effect immediately).
+        # so the change takes effect immediately). Tooltip is dynamic — set
+        # in _refresh_menu_toggles_qt with the right one of the 6 cases
+        # (forcing_cpu × VRAM tier).
         self.action_force_cpu_qt = self.menu.addAction(_("Force CPU (no GPU)"))
         self.action_force_cpu_qt.setCheckable(True)
         _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
-        self.action_force_cpu_qt.setChecked(_fc in ("1", "true", "yes"))
+        _initial_force = _fc in ("1", "true", "yes")
+        self.action_force_cpu_qt.setChecked(_initial_force)
         self.action_force_cpu_qt.setToolTip(
-            _("Disable GPU acceleration for all ASR backends. "
-              "Useful on battery or when the GPU is shared with other apps."))
+            _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
         self.action_force_cpu_qt.toggled.connect(self._on_force_cpu_toggled_qt)
 
         self.menu.addSeparator()
@@ -1245,8 +1295,12 @@ class DicteeTrayQt:
             trpp_st = read_conf_value("DICTEE_TRPP_SHORT_TEXT", "true").lower() == "true"
             _set(self.action_short_qt, pp_st or trpp_st)
         if hasattr(self, "action_force_cpu_qt"):
-            _set(self.action_force_cpu_qt,
-                 read_conf_value("DICTEE_FORCE_CPU", "0").lower() in ("1", "true", "yes"))
+            _forcing = read_conf_value("DICTEE_FORCE_CPU", "0").lower() in ("1", "true", "yes")
+            _set(self.action_force_cpu_qt, _forcing)
+            # Refresh the dynamic warning tooltip each time the menu opens so
+            # it stays accurate after external changes (setup, CLI, plasmoid).
+            self.action_force_cpu_qt.setToolTip(
+                _force_cpu_warning(_forcing, _detect_gpu_vram_gb()))
 
     def _delayed_daemon_refresh(self):
         self._check_daemon()

@@ -170,6 +170,16 @@ PlasmoidItem {
                     var fc = (parts[12] || "0").toLowerCase()
                     root.forceCpuActive = (fc === "1" || fc === "true" || fc === "yes")
                 }
+            } else if (source === readGpuVramCmd) {
+                // Parse "nvidia-smi memory.total" output: a single integer in MB,
+                // or empty if no NVIDIA / nvidia-smi missing.
+                var raw = stdout.trim()
+                if (raw === "") {
+                    root.gpuVramGb = 0.0
+                } else {
+                    var mb = parseInt(raw, 10)
+                    root.gpuVramGb = isNaN(mb) ? 0.0 : Math.round(mb / 1024 * 10) / 10
+                }
             } else if (source.indexOf("dictee-translate-langs") !== -1) {
                 var langs = stdout.trim()
                 var newList = langs.length > 0 ? langs.split(",") : []
@@ -352,6 +362,12 @@ PlasmoidItem {
     property bool llmPostprocessEnabled: false
     property string currentParakeetQuant: "fp32"  // "fp32" or "int8" — Parakeet model variant
     property bool forceCpuActive: false           // DICTEE_FORCE_CPU=1 → true
+    // Total NVIDIA VRAM in GB (0.0 if no NVIDIA / nvidia-smi missing).
+    // Probed once at startup; used by the Force CPU tooltip to compute the
+    // right one of the 6 warning cases (same logic as dictee-setup.py
+    // _refresh_force_cpu_warning and dictee-tray.py _force_cpu_warning).
+    property real gpuVramGb: 0.0
+    property string readGpuVramCmd: "bash -c \"nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' '\""
     property string currentAudioSource: ""
     property var audioSourceList: []
     property string listAudioSourcesCmd: "dictee-audio-sources"
@@ -397,6 +413,9 @@ PlasmoidItem {
         executable.run(checkInstalledCmd)
         executable.run(micVolumeCmd)
         executable.run(listAudioSourcesCmd)
+        // VRAM only needs to be probed once (total VRAM doesn't change at runtime).
+        // We probe on each refresh anyway — cheap (nvidia-smi <100 ms cached).
+        executable.run(readGpuVramCmd)
         // Refresh translate langs (always — combo may be empty on first open)
         root.lastTranslateBackendForLangs = root.currentTranslateBackend
         executable.run(translateLangsCmd + " " + root.currentTranslateBackend)

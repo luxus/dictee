@@ -4221,3 +4221,40 @@ msgid ""
 msgstr ""
 "Désactive l'accélération GPU pour tous les backends ASR. Utile sur batterie "
 "ou quand le GPU est partagé avec d'autres applications."
+
+#: dictee-tray.py
+msgid ""
+"⚠ CPU mode forced — losing GPU acceleration ({:.1f} GB VRAM available). "
+"Parakeet FP32 will be ~6× slower."
+msgstr ""
+"⚠ Mode CPU forcé — perte de l'accélération GPU ({:.1f} Go de VRAM "
+"disponibles). Parakeet FP32 sera environ 6× plus lent."
+
+#: dictee-tray.py
+msgid ""
+"ℹ CPU mode forced — GPU has only {:.1f} GB VRAM, FP32 likely OOM anyway. "
+"INT8 on CPU is a reasonable fallback."
+msgstr ""
+"ℹ Mode CPU forcé — la GPU n'a que {:.1f} Go de VRAM, FP32 risque l'OOM de "
+"toute façon. INT8 sur CPU est un repli raisonnable."
+
+#: dictee-tray.py
+msgid "ℹ No GPU detected — CPU is the only option (this toggle is a no-op)."
+msgstr ""
+"ℹ Aucun GPU détecté — CPU est la seule option (ce bouton n'a pas d'effet)."
+
+#: dictee-tray.py
+msgid "✓ GPU acceleration enabled ({:.1f} GB VRAM detected)."
+msgstr "✓ Accélération GPU activée ({:.1f} Go de VRAM détectés)."
+
+#: dictee-tray.py
+msgid ""
+"⚠ GPU has only {:.1f} GB VRAM — Parakeet FP32 may OOM at load. Consider "
+"toggling CPU or using INT8."
+msgstr ""
+"⚠ La GPU n'a que {:.1f} Go de VRAM — Parakeet FP32 risque l'OOM au "
+"chargement. Envisagez de basculer CPU ou d'utiliser INT8."
+
+#: dictee-tray.py
+msgid "ℹ No GPU detected — running on CPU regardless of this toggle."
+msgstr "ℹ Aucun GPU détecté — exécution sur CPU indépendamment de ce bouton."

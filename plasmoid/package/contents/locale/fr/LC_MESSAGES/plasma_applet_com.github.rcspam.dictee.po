@@ -535,3 +535,40 @@ msgstr "Parakeet (plus précis)"
 #: package/contents/ui/FullRepresentation.qml
 msgid "Parakeet (faster)"
 msgstr "Parakeet (plus rapide)"
+
+#: package/contents/ui/FullRepresentation.qml
+msgid ""
+"⚠ CPU mode forced — losing GPU acceleration (%1 GB VRAM available). "
+"Parakeet FP32 will be ~6× slower."
+msgstr ""
+"⚠ Mode CPU forcé — perte de l'accélération GPU (%1 Go de VRAM disponibles). "
+"Parakeet FP32 sera environ 6× plus lent."
+
+#: package/contents/ui/FullRepresentation.qml
+msgid ""
+"ℹ CPU mode forced — GPU has only %1 GB VRAM, FP32 likely OOM anyway. INT8 "
+"on CPU is a reasonable fallback."
+msgstr ""
+"ℹ Mode CPU forcé — la GPU n'a que %1 Go de VRAM, FP32 risque l'OOM de toute "
+"façon. INT8 sur CPU est un repli raisonnable."
+
+#: package/contents/ui/FullRepresentation.qml
+msgid "ℹ No GPU detected — CPU is the only option (this toggle is a no-op)."
+msgstr ""
+"ℹ Aucun GPU détecté — CPU est la seule option (ce bouton n'a pas d'effet)."
+
+#: package/contents/ui/FullRepresentation.qml
+msgid "✓ GPU acceleration enabled (%1 GB VRAM detected)."
+msgstr "✓ Accélération GPU activée (%1 Go de VRAM détectés)."
+
+#: package/contents/ui/FullRepresentation.qml
+msgid ""
+"⚠ GPU has only %1 GB VRAM — Parakeet FP32 may OOM at load. Consider "
+"toggling CPU or using INT8."
+msgstr ""
+"⚠ La GPU n'a que %1 Go de VRAM — Parakeet FP32 risque l'OOM au chargement. "
+"Envisagez de basculer CPU ou d'utiliser INT8."
+
+#: package/contents/ui/FullRepresentation.qml
+msgid "ℹ No GPU detected — running on CPU regardless of this toggle."
+msgstr "ℹ Aucun GPU détecté — exécution sur CPU indépendamment de ce bouton."
