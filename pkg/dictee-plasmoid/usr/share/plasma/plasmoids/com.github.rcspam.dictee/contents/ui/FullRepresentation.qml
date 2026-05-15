@@ -586,8 +586,8 @@ RowLayout {
             model: ListModel {
                 id: asrModel
                 Component.onCompleted: {
-                    append({ "text": i18n("Parakeet (more precise)"), "value": "parakeet", "quant": "fp32" })
-                    append({ "text": i18n("Parakeet (faster)"),       "value": "parakeet", "quant": "int8" })
+                    append({ "text": i18n("Parakeet (precise)"), "value": "parakeet", "quant": "fp32" })
+                    append({ "text": i18n("Parakeet (fast)"),    "value": "parakeet", "quant": "int8" })
                     append({ "text": "Canary",   "value": "canary",  "quant": "" })
                     append({ "text": "Vosk",     "value": "vosk",    "quant": "" })
                     append({ "text": "Whisper",  "value": "whisper", "quant": "" })
@@ -899,9 +899,9 @@ RowLayout {
                     return i18n("Force CPU (no GPU anyway)")
                 }
                 if (vram >= 4)
-                    return i18n("GPU active (%1 GB)", vram.toFixed(1))
+                    return i18n("GPU active")
                 if (vram > 0)
-                    return i18n("GPU active (%1 GB — low VRAM)", vram.toFixed(1))
+                    return i18n("GPU active (low VRAM)")
                 return i18n("No GPU detected")
             }
             QQC2.ToolTip.text: _forceCpuWarning()

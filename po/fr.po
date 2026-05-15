@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dictee 0.99\n"
 "Report-Msgid-Bugs-To: rcspams@gmail.com\n"
-"POT-Creation-Date: 2026-05-15 17:01+0200\n"
+"POT-Creation-Date: 2026-05-15 17:09+0200\n"
 "PO-Revision-Date: 2026-03-10 12:00+0100\n"
 "Last-Translator: rcspam <rcspams@gmail.com>\n"
 "Language-Team: French\n"
@@ -3903,12 +3903,12 @@ msgid "Start the server with {n} languages ({langs})?"
 msgstr "Démarrer le serveur avec {n} langues ({langs}) ?"
 
 #: dictee-tray.py:207
-msgid "Parakeet (more precise)"
-msgstr "Parakeet (plus précis)"
+msgid "Parakeet (precise)"
+msgstr "Parakeet (précis)"
 
 #: dictee-tray.py:208
-msgid "Parakeet (faster)"
-msgstr "Parakeet (plus rapide)"
+msgid "Parakeet (fast)"
+msgstr "Parakeet (rapide)"
 
 #: dictee-tray.py:247
 msgid "Force CPU (loses GPU acceleration)"
@@ -3923,12 +3923,12 @@ msgid "Force CPU (no GPU anyway)"
 msgstr "Forcer CPU (pas de GPU de toute façon)"
 
 #: dictee-tray.py:252
-msgid "GPU active ({:.1f} GB)"
-msgstr "GPU actif ({:.1f} Go)"
+msgid "GPU active"
+msgstr "GPU actif"
 
 #: dictee-tray.py:254
-msgid "GPU active ({:.1f} GB — low VRAM)"
-msgstr "GPU actif ({:.1f} Go — VRAM faible)"
+msgid "GPU active (low VRAM)"
+msgstr "GPU actif (VRAM faible)"
 
 #: dictee-tray.py:255
 msgid "No GPU detected"
@@ -4762,6 +4762,9 @@ msgstr "Échec de l'export : {error}"
 #, python-brace-format
 msgid "Exported {n} file(s) to {dir}"
 msgstr "{n} fichier(s) exporté(s) vers {dir}"
+
+#~ msgid "GPU active ({:.1f} GB)"
+#~ msgstr "GPU actif ({:.1f} Go)"
 
 #~ msgid ""
 #~ "Docker permissions are required for LibreTranslate.\n"

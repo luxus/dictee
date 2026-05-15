@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dictee 1.0.0\n"
 "Report-Msgid-Bugs-To: rcspams@gmail.com\n"
-"POT-Creation-Date: 2026-05-15 17:01+0200\n"
+"POT-Creation-Date: 2026-05-15 17:09+0200\n"
 "PO-Revision-Date: 2026-03-13 00:09+0100\n"
 "Last-Translator: rcspam <rcspams@gmail.com>\n"
 "Language-Team: Italian\n"
@@ -3897,11 +3897,11 @@ msgid "Start the server with {n} languages ({langs})?"
 msgstr "Avviare il server con {n} lingue ({langs})?"
 
 #: dictee-tray.py:207
-msgid "Parakeet (more precise)"
+msgid "Parakeet (precise)"
 msgstr ""
 
 #: dictee-tray.py:208
-msgid "Parakeet (faster)"
+msgid "Parakeet (fast)"
 msgstr ""
 
 #: dictee-tray.py:247
@@ -3919,11 +3919,12 @@ msgid "Force CPU (no GPU anyway)"
 msgstr "Forza CPU (libera VRAM GPU)"
 
 #: dictee-tray.py:252
-msgid "GPU active ({:.1f} GB)"
-msgstr ""
+#, fuzzy
+msgid "GPU active"
+msgstr "GPU rilevata"
 
 #: dictee-tray.py:254
-msgid "GPU active ({:.1f} GB — low VRAM)"
+msgid "GPU active (low VRAM)"
 msgstr ""
 
 #: dictee-tray.py:255

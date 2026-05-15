@@ -204,11 +204,11 @@ def _ptt_label():
 # Note: label_msgid is NOT pre-translated at module load (gettext may not be
 # initialised yet). _() is called when the menu is constructed.
 ASR_BACKENDS = [
-    ("parakeet-fp32", N_("Parakeet (more precise)"), "parakeet", "fp32"),
-    ("parakeet-int8", N_("Parakeet (faster)"),       "parakeet", "int8"),
-    ("canary",        "Canary",                       "canary",   None),
-    ("vosk",          "Vosk",                         "vosk",     None),
-    ("whisper",       "Whisper",                      "whisper",  None),
+    ("parakeet-fp32", N_("Parakeet (precise)"), "parakeet", "fp32"),
+    ("parakeet-int8", N_("Parakeet (fast)"),    "parakeet", "int8"),
+    ("canary",        "Canary",                  "canary",   None),
+    ("vosk",          "Vosk",                    "vosk",     None),
+    ("whisper",       "Whisper",                 "whisper",  None),
 ]
 
 TRANSLATE_BACKENDS = [
@@ -249,9 +249,9 @@ def _force_cpu_warning(forcing_cpu, vram_gb):
             return _("Force CPU")
         return _("Force CPU (no GPU anyway)")
     if vram_gb >= 4:
-        return _("GPU active ({:.1f} GB)").format(vram_gb)
+        return _("GPU active")
     if vram_gb > 0:
-        return _("GPU active ({:.1f} GB — low VRAM)").format(vram_gb)
+        return _("GPU active (low VRAM)")
     return _("No GPU detected")
 
 

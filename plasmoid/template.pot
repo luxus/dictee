@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasma-applet-com.github.rcspam.dictee\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-15 17:01+0200\n"
+"POT-Creation-Date: 2026-05-15 17:09+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -453,11 +453,11 @@ msgid "ASR:"
 msgstr ""
 
 #: plasmoid/package/contents/ui/FullRepresentation.qml:589
-msgid "Parakeet (more precise)"
+msgid "Parakeet (precise)"
 msgstr ""
 
 #: plasmoid/package/contents/ui/FullRepresentation.qml:590
-msgid "Parakeet (faster)"
+msgid "Parakeet (fast)"
 msgstr ""
 
 #: plasmoid/package/contents/ui/FullRepresentation.qml:644
@@ -533,11 +533,11 @@ msgid "Force CPU (no GPU anyway)"
 msgstr ""
 
 #: plasmoid/package/contents/ui/FullRepresentation.qml:902
-msgid "GPU active (%1 GB)"
+msgid "GPU active"
 msgstr ""
 
 #: plasmoid/package/contents/ui/FullRepresentation.qml:904
-msgid "GPU active (%1 GB — low VRAM)"
+msgid "GPU active (low VRAM)"
 msgstr ""
 
 #: plasmoid/package/contents/ui/FullRepresentation.qml:905
