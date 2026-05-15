@@ -61,15 +61,16 @@ PlasmoidItem {
 
     toolTipMainText: "Dictee"
     toolTipSubText: {
+        var keySuffix = root.pttKey ? " • " + root.pttKey : ""
         switch (state) {
         case "offline":
             if (!root.dicteeInstalled) return i18n("Dictée not installed")
             if (!root.dicteeConfigured) return i18n("Dictée not configured — run dictee-setup")
             return i18n("Daemon stopped")
         case "idle":
-            return i18n("Daemon active")
+            return i18n("Daemon active") + keySuffix
         case "recording":
-            return i18n("Recording…")
+            return i18n("Recording…") + keySuffix
         case "transcribing":
             return i18n("Transcribing…")
         case "switching":
@@ -77,7 +78,7 @@ PlasmoidItem {
         case "preparing":
             return i18n("Preparing…")
         case "diarize-ready":
-            return i18n("Diarize ready")
+            return i18n("Diarize ready") + keySuffix
         case "diarizing":
             return i18n("Diarizing…")
         default:
@@ -157,6 +158,17 @@ PlasmoidItem {
                 }
                 if (parts.length >= 10) {
                     root.llmPostprocessEnabled = (parts[9] === "true")
+                }
+                if (parts.length >= 11) {
+                    root.pttKey = _pttLabel(parts[10] || "67")
+                }
+                if (parts.length >= 12) {
+                    var q = (parts[11] || "fp32").toLowerCase()
+                    root.currentParakeetQuant = (q === "int8") ? "int8" : "fp32"
+                }
+                if (parts.length >= 13) {
+                    var fc = (parts[12] || "0").toLowerCase()
+                    root.forceCpuActive = (fc === "1" || fc === "true" || fc === "yes")
                 }
             } else if (source.indexOf("dictee-translate-langs") !== -1) {
                 var langs = stdout.trim()
@@ -317,11 +329,29 @@ PlasmoidItem {
     property string currentLangTarget: "en"
     property var availableLangTarget: []
     property real backendUserChangeTime: 0  // timestamp of last user-initiated backend change
-    property string readConfCmd: "bash -c 'source \"${XDG_CONFIG_HOME:-$HOME/.config}/dictee.conf\" 2>/dev/null; echo \"$DICTEE_ASR_BACKEND|$DICTEE_TRANSLATE_BACKEND|$DICTEE_TRANS_ENGINE|$DICTEE_AUDIO_SOURCE|$DICTEE_LANG_TARGET|$DICTEE_LANG_SOURCE|$DICTEE_AUDIO_CONTEXT|$DICTEE_PP_SHORT_TEXT|$DICTEE_TRPP_SHORT_TEXT|$DICTEE_LLM_POSTPROCESS\"'"
+    property string readConfCmd: "bash -c 'source \"${XDG_CONFIG_HOME:-$HOME/.config}/dictee.conf\" 2>/dev/null; echo \"$DICTEE_ASR_BACKEND|$DICTEE_TRANSLATE_BACKEND|$DICTEE_TRANS_ENGINE|$DICTEE_AUDIO_SOURCE|$DICTEE_LANG_TARGET|$DICTEE_LANG_SOURCE|$DICTEE_AUDIO_CONTEXT|$DICTEE_PP_SHORT_TEXT|$DICTEE_TRPP_SHORT_TEXT|$DICTEE_LLM_POSTPROCESS|$DICTEE_PTT_KEY|$DICTEE_PARAKEET_QUANT|$DICTEE_FORCE_CPU\"'"
+    property string pttKey: "F9"
+    // Map evdev keycode (DICTEE_PTT_KEY) to a human label. Covers F1..F24 +
+    // common keys; unknown codes fall back to "key{kc}". Mirrors the table
+    // in dictee-tray.py:_PTT_KEY_LABELS — kept in sync manually.
+    function _pttLabel(raw) {
+        if (!raw) return "F9"
+        var kc = parseInt(raw, 10)
+        if (isNaN(kc)) return raw
+        if (kc >= 59 && kc <= 68) return "F" + (kc - 58)        // F1..F10
+        if (kc === 87) return "F11"
+        if (kc === 88) return "F12"
+        if (kc >= 183 && kc <= 194) return "F" + (kc - 170)     // F13..F24
+        var named = { 1: "Esc", 14: "BackSpace", 28: "Enter", 57: "Space",
+                      103: "Up", 105: "Left", 106: "Right", 108: "Down" }
+        return named[kc] || ("key" + kc)
+    }
     property string translateLangsCmd: "dictee-translate-langs"
     property bool audioContextEnabled: false
     property bool shortTextEnabled: true
     property bool llmPostprocessEnabled: false
+    property string currentParakeetQuant: "fp32"  // "fp32" or "int8" — Parakeet model variant
+    property bool forceCpuActive: false           // DICTEE_FORCE_CPU=1 → true
     property string currentAudioSource: ""
     property var audioSourceList: []
     property string listAudioSourcesCmd: "dictee-audio-sources"
