@@ -150,6 +150,20 @@ DICTEE_AUDIO_CONTEXT=true
 DICTEE_AUDIO_CONTEXT_TIMEOUT=30
 
 # ============================================================================
+# GPU / CPU mode (advanced)
+# ============================================================================
+
+# Force CPU mode for all ASR backends, even if a GPU is detected.
+# Truthy values: 1, true, yes (case-insensitive).
+# Anything else (0, false, no, empty, unset) → GPU used if available.
+# Use cases:
+#   - laptop on battery (CPU mode is more power-efficient)
+#   - GPU shared with other workloads (Ollama, games)
+#   - debugging GPU-specific issues
+# WARNING: Canary 1B is very slow on CPU (~5 s for 16 s audio, vs 0.65 s GPU).
+#DICTEE_FORCE_CPU=0
+
+# ============================================================================
 # Parakeet quantization (advanced)
 # ============================================================================
 

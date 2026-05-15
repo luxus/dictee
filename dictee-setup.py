@@ -383,6 +383,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 trpp_states=None, trpp_short_text_max=3,
                 cheatsheet_mod="", cheatsheet_key_seq="",
                 parakeet_quant=None,
+                force_cpu=None,
                 mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
@@ -411,6 +412,11 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
         # untouched (preserve existing user value or comment).
         **({"DICTEE_PARAKEET_QUANT": parakeet_quant}
            if parakeet_quant in ("fp32", "int8") else {}),
+        # Force CPU mode (disables GPU acceleration for all ASR backends).
+        # We write "1" or "0" explicitly so the daemon restart detects the
+        # change. Rust side parses both truthy ("1"/"true"/"yes") and falsy.
+        **({"DICTEE_FORCE_CPU": "1" if force_cpu else "0"}
+           if force_cpu is not None else {}),
         "DICTEE_PTT_MODE": ptt_mode,
         "DICTEE_PTT_KEY": str(ptt_key),
         "DICTEE_POSTPROCESS": "true" if postprocess else "false",
@@ -8182,6 +8188,52 @@ class DicteeSetupDialog(QDialog):
             f"</p>"
         )
 
+    def _refresh_force_cpu_warning(self):
+        """Update the warning label under the Force CPU toggle.
+        Guard-rail: tell the user what they lose / gain by switching modes,
+        based on detected GPU VRAM. Called by ToggleSwitch.toggled and once
+        at build time."""
+        if not hasattr(self, '_lbl_force_cpu_warning') or not hasattr(self, 'tgl_force_cpu'):
+            return
+        forcing_cpu = self.tgl_force_cpu.isChecked()
+        total_vram, _free = get_gpu_vram_gb()
+
+        if forcing_cpu:
+            # User wants CPU. Warn if GPU was capable.
+            if total_vram >= 4:
+                msg = ("⚠ " + _("CPU mode forced — losing GPU acceleration "
+                                "({:.1f} GB VRAM available). Parakeet FP32 will "
+                                "be ~6× slower; Canary will be unusably slow.")
+                       .format(total_vram))
+                color = "#d8a000"  # orange warning
+            elif total_vram > 0:
+                msg = ("ℹ " + _("CPU mode forced — GPU has only {:.1f} GB VRAM, "
+                                "FP32 likely OOM anyway. int8 on CPU is a "
+                                "reasonable fallback.").format(total_vram))
+                color = "#7a7a7a"  # neutral grey
+            else:
+                msg = ("ℹ " + _("No GPU detected — CPU is the only option "
+                                "(this toggle is a no-op)."))
+                color = "#7a7a7a"
+        else:
+            # User wants GPU (or default).
+            if total_vram >= 4:
+                msg = ("✓ " + _("GPU acceleration enabled "
+                                "({:.1f} GB VRAM detected).").format(total_vram))
+                color = "#3a7a3a"  # green ok
+            elif total_vram > 0:
+                msg = ("⚠ " + _("GPU has only {:.1f} GB VRAM — Parakeet FP32 "
+                                "may OOM at load. Consider toggling CPU "
+                                "or using INT8.").format(total_vram))
+                color = "#d8a000"
+            else:
+                msg = ("ℹ " + _("No GPU detected — running on CPU regardless "
+                                "of this toggle."))
+                color = "#7a7a7a"
+
+        self._lbl_force_cpu_warning.setText(
+            f"<p style='font-size: 9pt; color: {color};'>{msg}</p>")
+
     def _apply_block_opacity(self, widget, opacity):
         """Apply or remove QGraphicsOpacityEffect on a widget.
         opacity >= 1.0 → restore full opacity (effect removed).
@@ -8378,6 +8430,38 @@ class DicteeSetupDialog(QDialog):
                 break
 
         lay_outer.addWidget(parakeet_box)
+
+        # === Performance group box (Force CPU toggle, applies to all backends) ===
+        perf_box = QGroupBox(_("Performance"))
+        perf_lay = QVBoxLayout(perf_box)
+        perf_lay.setContentsMargins(12, 12, 12, 10)
+        perf_lay.setSpacing(6)
+
+        force_cpu_active = (self.conf.get("DICTEE_FORCE_CPU", "0").lower()
+                            in ("1", "true", "yes"))
+
+        # Centered GPU [toggle] CPU row
+        force_row = QHBoxLayout()
+        force_row.setContentsMargins(0, 0, 0, 0)
+        force_row.addStretch()
+        force_row.addWidget(QLabel("GPU"))
+        self.tgl_force_cpu = ToggleSwitch("")
+        self.tgl_force_cpu.setChecked(force_cpu_active)
+        self.tgl_force_cpu.toggled.connect(self._refresh_force_cpu_warning)
+        force_row.addWidget(self.tgl_force_cpu)
+        force_row.addWidget(QLabel("CPU"))
+        force_row.addStretch()
+        perf_lay.addLayout(force_row)
+
+        # Dynamic warning label below the toggle (guard-rail)
+        self._lbl_force_cpu_warning = QLabel()
+        self._lbl_force_cpu_warning.setWordWrap(True)
+        self._lbl_force_cpu_warning.setStyleSheet("QLabel { padding-left: 4px; }")
+        perf_lay.addWidget(self._lbl_force_cpu_warning)
+        # Initial render
+        self._refresh_force_cpu_warning()
+
+        lay_outer.addWidget(perf_box)
 
         # === Sortformer group box (separate, simple title) ===
         sortformer_box = QGroupBox(_("Sortformer"))
@@ -17695,7 +17779,8 @@ class DicteeSetupDialog(QDialog):
         _old_asr = {}
         _ASR_KEYS = ("DICTEE_ASR_BACKEND", "DICTEE_WHISPER_MODEL",
                      "DICTEE_WHISPER_LANG", "DICTEE_VOSK_MODEL",
-                     "DICTEE_AUDIO_SOURCE", "DICTEE_PARAKEET_QUANT")
+                     "DICTEE_AUDIO_SOURCE", "DICTEE_PARAKEET_QUANT",
+                     "DICTEE_FORCE_CPU")
         try:
             if os.path.isfile(CONF_PATH):
                 with open(CONF_PATH) as _f:
@@ -17938,6 +18023,9 @@ class DicteeSetupDialog(QDialog):
                         # correct variant on restart.
                         ("int8" if self.tgl_quant.isChecked() else "fp32")
                         if hasattr(self, 'tgl_quant') else None),
+                    force_cpu=(
+                        self.tgl_force_cpu.isChecked()
+                        if hasattr(self, 'tgl_force_cpu') else None),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.
@@ -18052,12 +18140,16 @@ class DicteeSetupDialog(QDialog):
             svc_error = _("Warning: could not enable {svc} at boot.\n{err}").format(
                 svc=active_svc, err=en.stderr.strip())
 
-        # Include DICTEE_PARAKEET_QUANT so toggling FP32 ↔ int8 triggers a
-        # daemon restart (otherwise the daemon keeps the old model in VRAM/RAM
-        # and the env var change has no visible effect).
+        # Include DICTEE_PARAKEET_QUANT and DICTEE_FORCE_CPU so toggling either
+        # triggers a daemon restart (otherwise the daemon keeps the old model
+        # / mode and the env var change has no visible effect).
         _new_parakeet_quant = (
             ("int8" if self.tgl_quant.isChecked() else "fp32")
             if hasattr(self, 'tgl_quant') else ""
+        )
+        _new_force_cpu = (
+            ("1" if self.tgl_force_cpu.isChecked() else "0")
+            if hasattr(self, 'tgl_force_cpu') else ""
         )
         _new_asr = {
             "DICTEE_ASR_BACKEND": asr_backend,
@@ -18066,6 +18158,7 @@ class DicteeSetupDialog(QDialog):
             "DICTEE_VOSK_MODEL": vosk_model,
             "DICTEE_AUDIO_SOURCE": str(audio_source),
             "DICTEE_PARAKEET_QUANT": _new_parakeet_quant,
+            "DICTEE_FORCE_CPU": _new_force_cpu,
         }
         _old_asr_normalized = {k: _old_asr.get(k, "") for k in _new_asr}
         _asr_changed = _new_asr != _old_asr_normalized
