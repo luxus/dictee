@@ -8177,20 +8177,34 @@ class DicteeSetupDialog(QDialog):
         )
 
     def _refresh_tdt_active_badge(self):
-        """Live-update TDT model labels when the toggle flips: the selected
-        variant stays at full colour, the other goes grey. Called by
-        ToggleSwitch.toggled — no need to wait for Apply."""
+        """Live-update TDT model rows when the toggle flips:
+        - Selected variant: full colour (label + buttons + progress)
+        - Other variant: greyed out (label text + buttons styled grey)
+        The buttons stay functionally enabled (user can still re-install or
+        delete the non-active variant), only their colour is dimmed.
+        Called by ToggleSwitch.toggled — no need to wait for Apply."""
         if not hasattr(self, 'tgl_quant'):
             return
         new_active = "int8" if self.tgl_quant.isChecked() else "fp32"
         recommended = suggest_parakeet_quant()
         for model in ASR_MODELS:
-            if model.get("quant") not in ("fp32", "int8"):
+            model_quant = model.get("quant")
+            if model_quant not in ("fp32", "int8"):
                 continue
+            is_active = (model_quant == new_active)
             widgets = self._model_widgets.get(model["id"])
-            if widgets and widgets.get("desc_label"):
+            if not widgets:
+                continue
+            # 1) Refresh the description label (title + sub-line greyed)
+            if widgets.get("desc_label"):
                 widgets["desc_label"].setText(
                     self._make_model_label_html(model, new_active, recommended))
+            # 2) Grey out the buttons (still clickable, just visually dimmed)
+            dim_style = "" if is_active else "QPushButton { color: #888; }"
+            for k in ("button", "btn_delete", "btn_cancel"):
+                btn = widgets.get(k)
+                if btn:
+                    btn.setStyleSheet(dim_style)
 
     def _build_parakeet_options(self, parent_layout):
         """Build Parakeet + Sortformer model download UI.
@@ -8267,6 +8281,13 @@ class DicteeSetupDialog(QDialog):
                 "button": btn, "btn_delete": btn_del,
                 "btn_cancel": btn_cancel, "progress": progress, "model": model,
             }
+            # Apply initial grey style on buttons if this TDT variant is not active
+            model_quant = model.get("quant")
+            if model_quant in ("fp32", "int8") and model_quant != active_quant:
+                dim_style = "QPushButton { color: #888; }"
+                btn.setStyleSheet(dim_style)
+                btn_del.setStyleSheet(dim_style)
+                btn_cancel.setStyleSheet(dim_style)
 
         # === Parakeet group box (no subtitle — the ASR backend combobox already
         # identifies the model family). Just "Parakeet TDT" as section anchor. ===
@@ -8286,13 +8307,12 @@ class DicteeSetupDialog(QDialog):
             and model_is_installed(ASR_MODELS[1])
         )
 
-        # Toggle switch: unchecked = FP32 (left), checked = INT8 (right).
-        # The variants above are greyed out when not selected, so the toggle
-        # state is visually obvious without extra side labels.
+        # Toggle switch centered horizontally: "FP32 [━━●] INT8".
+        # Variants above are greyed out when not selected, so the toggle state
+        # is visually obvious without a header label.
         toggle_row = QHBoxLayout()
         toggle_row.setContentsMargins(0, 6, 0, 0)
-        toggle_row.addWidget(QLabel("<b>" + _("Active variant:") + "</b>"))
-        toggle_row.addSpacing(12)
+        toggle_row.addStretch()  # left padding to center
         toggle_row.addWidget(QLabel("FP32"))
 
         self.tgl_quant = ToggleSwitch("")
@@ -8308,7 +8328,7 @@ class DicteeSetupDialog(QDialog):
         toggle_row.addWidget(self.tgl_quant)
 
         toggle_row.addWidget(QLabel("INT8"))
-        toggle_row.addStretch()
+        toggle_row.addStretch()  # right padding to center
         parakeet_lay.addLayout(toggle_row)
 
         # Hardware recommendation footer
@@ -8320,9 +8340,10 @@ class DicteeSetupDialog(QDialog):
         else:
             reason = _("No GPU detected — int8 is ~34 % faster on CPU (AVX-VNNI)")
         lbl_reco = QLabel(
-            f"<p style='font-size: 9pt; color: #7a7; padding-left: 4px;'>★ "
+            # Same orange as the ★ Recommended badge on the variant row for visual link
+            f"<p style='font-size: 9pt; color: #d8a000; padding-left: 4px;'>★ "
             + _("Recommended for your hardware:")
-            + f" <b>{recommended_quant}</b> &mdash; {reason}</p>"
+            + f" <b>{recommended_quant.upper()}</b> &mdash; {reason}</p>"
         )
         lbl_reco.setWordWrap(True)
         parakeet_lay.addWidget(lbl_reco)
