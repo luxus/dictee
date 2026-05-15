@@ -8162,12 +8162,14 @@ class DicteeSetupDialog(QDialog):
                 f"{badges_html} — {desc_text}</p>")
 
     def _refresh_tdt_active_badge(self):
-        """Live-update ACTIVE badges on TDT model labels when the radio toggle changes.
-        Called by QRadioButton.toggled — no need to wait for Apply."""
-        if not hasattr(self, 'rb_quant_int8'):
+        """Live-update ACTIVE badges on TDT model labels + side labels around the
+        toggle switch when the user flips it. Called by ToggleSwitch.toggled,
+        before Apply, so the user gets immediate visual feedback."""
+        if not hasattr(self, 'tgl_quant'):
             return
-        new_active = "int8" if self.rb_quant_int8.isChecked() else "fp32"
+        new_active = "int8" if self.tgl_quant.isChecked() else "fp32"
         recommended = suggest_parakeet_quant()
+        # 1) Refresh badges on the 2 TDT model rows
         for model in ASR_MODELS:
             if model.get("quant") not in ("fp32", "int8"):
                 continue
@@ -8175,6 +8177,12 @@ class DicteeSetupDialog(QDialog):
             if widgets and widgets.get("desc_label"):
                 widgets["desc_label"].setText(
                     self._make_model_label_html(model, new_active, recommended))
+        # 2) Bold the side label of the currently-selected variant
+        if hasattr(self, '_lbl_toggle_fp32') and hasattr(self, '_lbl_toggle_int8'):
+            self._lbl_toggle_fp32.setText(
+                "<b>FP32</b>" if new_active == "fp32" else "FP32")
+            self._lbl_toggle_int8.setText(
+                "<b>INT8</b>" if new_active == "int8" else "INT8")
 
     def _build_parakeet_options(self, parent_layout):
         """Build Parakeet + Sortformer model download UI.
@@ -8269,35 +8277,36 @@ class DicteeSetupDialog(QDialog):
             and model_is_installed(ASR_MODELS[1])
         )
 
+        # Toggle switch: unchecked = FP32 (left), checked = INT8 (right).
+        # Layout: "Active variant:    FP32 [——●] INT8"   (bold side = selected)
         toggle_row = QHBoxLayout()
         toggle_row.setContentsMargins(0, 6, 0, 0)
         toggle_row.addWidget(QLabel("<b>" + _("Active variant:") + "</b>"))
-        self.rb_quant_int8 = QRadioButton("int8")
-        self.rb_quant_fp32 = QRadioButton("FP32")
-        self.rb_quant_int8.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
-        self.rb_quant_fp32.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
+        toggle_row.addSpacing(12)
 
-        # Pre-select active variant from conf
-        if active_quant == "int8":
-            self.rb_quant_int8.setChecked(True)
-        else:
-            self.rb_quant_fp32.setChecked(True)
+        self._lbl_toggle_fp32 = QLabel(
+            "<b>FP32</b>" if active_quant == "fp32" else "FP32")
+        self._lbl_toggle_fp32.setStyleSheet("QLabel { font-size: 11pt; }")
+        toggle_row.addWidget(self._lbl_toggle_fp32)
 
-        # Disable un-installed variants (can't make them active)
-        self.rb_quant_fp32.setEnabled(fp32_installed)
-        self.rb_quant_int8.setEnabled(int8_installed)
-        # If the active variant from conf isn't installed, fall back to the installed one
-        if not self.rb_quant_fp32.isEnabled() and self.rb_quant_int8.isEnabled():
-            self.rb_quant_int8.setChecked(True)
-        elif not self.rb_quant_int8.isEnabled() and self.rb_quant_fp32.isEnabled():
-            self.rb_quant_fp32.setChecked(True)
+        self.tgl_quant = ToggleSwitch("")  # standalone toggle, labels are external
+        self.tgl_quant.setChecked(active_quant == "int8")
+        # Enable only if BOTH variants are installed; otherwise auto-resolved + disabled
+        both_installed = fp32_installed and int8_installed
+        self.tgl_quant.setEnabled(both_installed)
+        if fp32_installed and not int8_installed:
+            self.tgl_quant.setChecked(False)
+        elif int8_installed and not fp32_installed:
+            self.tgl_quant.setChecked(True)
+        # Live refresh of ACTIVE badge and side-label bolding
+        self.tgl_quant.toggled.connect(self._refresh_tdt_active_badge)
+        toggle_row.addWidget(self.tgl_quant)
 
-        # Live update of ACTIVE badge when the user toggles
-        self.rb_quant_int8.toggled.connect(self._refresh_tdt_active_badge)
-        self.rb_quant_fp32.toggled.connect(self._refresh_tdt_active_badge)
+        self._lbl_toggle_int8 = QLabel(
+            "<b>INT8</b>" if active_quant == "int8" else "INT8")
+        self._lbl_toggle_int8.setStyleSheet("QLabel { font-size: 11pt; }")
+        toggle_row.addWidget(self._lbl_toggle_int8)
 
-        toggle_row.addWidget(self.rb_quant_int8)
-        toggle_row.addWidget(self.rb_quant_fp32)
         toggle_row.addStretch()
         parakeet_lay.addLayout(toggle_row)
 
@@ -17872,15 +17881,12 @@ class DicteeSetupDialog(QDialog):
                         self.cmb_trpp_short_text_max.currentData()
                         if hasattr(self, 'cmb_trpp_short_text_max') else 3) or 3,
                     parakeet_quant=(
-                        # Always read the radio's current state, even if the
-                        # variant is auto-resolved (single install) — so that
-                        # DICTEE_PARAKEET_QUANT is written to dictee.conf and
-                        # the daemon loads the correct variant on restart.
-                        "int8" if (hasattr(self, 'rb_quant_int8')
-                                   and self.rb_quant_int8.isChecked())
-                        else "fp32" if (hasattr(self, 'rb_quant_fp32')
-                                        and self.rb_quant_fp32.isChecked())
-                        else None),
+                        # Always read the toggle's state (even if auto-resolved
+                        # to a single installed variant) so DICTEE_PARAKEET_QUANT
+                        # is written to dictee.conf and the daemon picks the
+                        # correct variant on restart.
+                        ("int8" if self.tgl_quant.isChecked() else "fp32")
+                        if hasattr(self, 'tgl_quant') else None),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.
