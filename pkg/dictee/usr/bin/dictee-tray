@@ -936,7 +936,12 @@ class DicteeTrayAppIndicator:
     def _on_force_cpu_toggled_gtk(self, item):
         val = "1" if item.get_active() else "0"
         subprocess.Popen(["dictee-switch-backend", "force_cpu", val])
+        # Debounce: disable the menu item for 2 s to prevent rapid-fire
+        # toggling. The flock in the script serializes anyway — this is
+        # for UX clarity.
         from gi.repository import GLib
+        item.set_sensitive(False)
+        GLib.timeout_add(2000, lambda i=item: (i.set_sensitive(True), False)[1])
         GLib.timeout_add(2000, self._delayed_daemon_refresh)
 
     def _delayed_daemon_refresh(self):
@@ -1259,7 +1264,12 @@ class DicteeTrayQt:
     def _on_force_cpu_toggled_qt(self, checked):
         val = "1" if checked else "0"
         subprocess.Popen(["dictee-switch-backend", "force_cpu", val])
+        # Debounce: disable the menu action for 2 s to prevent rapid-fire
+        # toggling (which would chain daemon restarts). The flock in the
+        # script serializes anyway — this is for UX clarity.
         from PyQt6.QtCore import QTimer
+        self.action_force_cpu_qt.setEnabled(False)
+        QTimer.singleShot(2000, lambda: self.action_force_cpu_qt.setEnabled(True))
         QTimer.singleShot(2000, self._delayed_daemon_refresh)
 
     def _refresh_menu_toggles_qt(self):

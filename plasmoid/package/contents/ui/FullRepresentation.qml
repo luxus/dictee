@@ -861,6 +861,7 @@ RowLayout {
         QQC2.Switch {
             id: forceCpuSwitch
             visible: fullRep.dicteeConfigured
+            enabled: !cooldownTimer.running  // debounce: ~2 s after each click
             checked: root.forceCpuActive
             property bool syncing: false  // skip onToggled when syncing from main.qml
             Connections {
@@ -871,9 +872,19 @@ RowLayout {
                     forceCpuSwitch.syncing = false
                 }
             }
+            // Debounce: visually disable the toggle for 2 s after each user
+            // click. The flock in dictee-switch-backend serialises any
+            // concurrent calls anyway (defence-in-depth), this is just to
+            // prevent visual flicker from rapid taps.
+            Timer {
+                id: cooldownTimer
+                interval: 2000
+                repeat: false
+            }
             onToggled: {
                 if (syncing) return
                 executable.run("dictee-switch-backend force_cpu " + (checked ? "1" : "0"))
+                cooldownTimer.restart()
             }
             // Short tooltip — same 6 cases as the tray's _force_cpu_warning,
             // intentionally minimal. The detailed multi-line warning lives in

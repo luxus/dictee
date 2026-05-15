@@ -51,8 +51,22 @@ fi
 
 _dbg "command=$1 ${2:-}"
 
-
-
+# Serialize concurrent invocations (rapid toggle from plasmoid/tray, parallel
+# CLI calls, etc.) — without this, two processes can race on dictee.conf
+# (sed -i is not atomic) and trigger cascading daemon restarts.
+# `status` is read-only and skips the lock so it stays instant.
+# -w 5 = wait up to 5 s; if another invocation is still running (e.g. daemon
+# restart pending), give up silently with exit 0 — the latest user click wins
+# via the lock queue, intermediate ones are just dropped.
+if [ "$1" != "status" ]; then
+    LOCK_FILE="/tmp/dictee-switch-backend-${USER}.lock"
+    exec 200>"$LOCK_FILE"
+    if ! flock -w 5 -x 200; then
+        echo "dictee-switch-backend: another invocation is in progress, skipping." >&2
+        _dbg "skip: lock contention on $LOCK_FILE"
+        exit 0
+    fi
+fi
 
 case "$1" in
 status)
