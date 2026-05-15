@@ -888,9 +888,9 @@ RowLayout {
                     return i18n("Force CPU (no GPU anyway)")
                 }
                 if (vram >= 4)
-                    return i18n("GPU active (%1 GB)").arg(vram.toFixed(1))
+                    return i18n("GPU active (%1 GB)", vram.toFixed(1))
                 if (vram > 0)
-                    return i18n("GPU active (%1 GB — low VRAM)").arg(vram.toFixed(1))
+                    return i18n("GPU active (%1 GB — low VRAM)", vram.toFixed(1))
                 return i18n("No GPU detected")
             }
             QQC2.ToolTip.text: _forceCpuWarning()
