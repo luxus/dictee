@@ -8158,11 +8158,14 @@ class DicteeSetupDialog(QDialog):
             inactive_color = ""
 
         # ★ Recommended for your hardware — badge on the hardware-suggested variant.
-        # The hardware reason (CPU / GPU VRAM) is set as the QLabel tooltip below.
+        # Badge follows the variant's active state: orange when active, grey when
+        # the user has toggled away from the recommendation. Keeps the whole row
+        # visually coherent (no orange highlight floating on a greyed block).
         badge_html = ""
         if model_quant and model_quant == recommended_quant:
+            badge_color = "#d8a000" if is_active else "#888"
             badge_html = (
-                " <span style='color:#d8a000; font-size:10pt; font-weight:bold;'>★ "
+                f" <span style='color:{badge_color}; font-size:10pt; font-weight:bold;'>★ "
                 + _("Recommended for your hardware") + "</span>"
             )
 
