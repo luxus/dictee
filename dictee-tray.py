@@ -33,6 +33,10 @@ for _d in LOCALE_DIRS:
         break
 gettext.textdomain("dictee")
 _ = gettext.gettext
+# N_() = no-op marker used to flag translatable strings that are stored in
+# module-level data (e.g. ASR_BACKENDS) and translated later, when gettext
+# is fully initialised. xgettext picks them up via `-kN_`.
+N_ = lambda s: s
 
 
 def _tt(text):
@@ -200,11 +204,11 @@ def _ptt_label():
 # Note: label_msgid is NOT pre-translated at module load (gettext may not be
 # initialised yet). _() is called when the menu is constructed.
 ASR_BACKENDS = [
-    ("parakeet-fp32", "Parakeet (more precise)", "parakeet", "fp32"),
-    ("parakeet-int8", "Parakeet (faster)",       "parakeet", "int8"),
-    ("canary",        "Canary",                  "canary",   None),
-    ("vosk",          "Vosk",                    "vosk",     None),
-    ("whisper",       "Whisper",                 "whisper",  None),
+    ("parakeet-fp32", N_("Parakeet (more precise)"), "parakeet", "fp32"),
+    ("parakeet-int8", N_("Parakeet (faster)"),       "parakeet", "int8"),
+    ("canary",        "Canary",                       "canary",   None),
+    ("vosk",          "Vosk",                         "vosk",     None),
+    ("whisper",       "Whisper",                      "whisper",  None),
 ]
 
 TRANSLATE_BACKENDS = [
