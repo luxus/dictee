@@ -527,3 +527,11 @@ msgstr "Paramètres de la forme d'onde"
 
 #~ msgid "Preview (mic test)"
 #~ msgstr "Aperçu (test micro)"
+
+#: package/contents/ui/FullRepresentation.qml
+msgid "Parakeet (precision)"
+msgstr "Parakeet (précision)"
+
+#: package/contents/ui/FullRepresentation.qml
+msgid "Parakeet (fast)"
+msgstr "Parakeet (rapide)"

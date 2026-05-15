@@ -581,13 +581,17 @@ RowLayout {
             // Parakeet has two variants visible as separate entries (cosmetic
             // split — same backend, different quantization). When the user
             // picks one, we switch backend AND quantization.
+            // Labels are built dynamically with i18n() (not stored as plain
+            // strings in the ListModel) so they translate properly.
             model: ListModel {
                 id: asrModel
-                ListElement { text: "Parakeet (full)"; value: "parakeet"; quant: "fp32" }
-                ListElement { text: "Parakeet (light)"; value: "parakeet"; quant: "int8" }
-                ListElement { text: "Canary"; value: "canary"; quant: "" }
-                ListElement { text: "Vosk"; value: "vosk"; quant: "" }
-                ListElement { text: "Whisper"; value: "whisper"; quant: "" }
+                Component.onCompleted: {
+                    append({ "text": i18n("Parakeet (precision)"), "value": "parakeet", "quant": "fp32" })
+                    append({ "text": i18n("Parakeet (fast)"),       "value": "parakeet", "quant": "int8" })
+                    append({ "text": "Canary",   "value": "canary",  "quant": "" })
+                    append({ "text": "Vosk",     "value": "vosk",    "quant": "" })
+                    append({ "text": "Whisper",  "value": "whisper", "quant": "" })
+                }
             }
             textRole: "text"
             function syncIndex() {
