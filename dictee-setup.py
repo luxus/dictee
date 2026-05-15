@@ -17695,7 +17695,7 @@ class DicteeSetupDialog(QDialog):
         _old_asr = {}
         _ASR_KEYS = ("DICTEE_ASR_BACKEND", "DICTEE_WHISPER_MODEL",
                      "DICTEE_WHISPER_LANG", "DICTEE_VOSK_MODEL",
-                     "DICTEE_AUDIO_SOURCE")
+                     "DICTEE_AUDIO_SOURCE", "DICTEE_PARAKEET_QUANT")
         try:
             if os.path.isfile(CONF_PATH):
                 with open(CONF_PATH) as _f:
@@ -18052,12 +18052,20 @@ class DicteeSetupDialog(QDialog):
             svc_error = _("Warning: could not enable {svc} at boot.\n{err}").format(
                 svc=active_svc, err=en.stderr.strip())
 
+        # Include DICTEE_PARAKEET_QUANT so toggling FP32 ↔ int8 triggers a
+        # daemon restart (otherwise the daemon keeps the old model in VRAM/RAM
+        # and the env var change has no visible effect).
+        _new_parakeet_quant = (
+            ("int8" if self.tgl_quant.isChecked() else "fp32")
+            if hasattr(self, 'tgl_quant') else ""
+        )
         _new_asr = {
             "DICTEE_ASR_BACKEND": asr_backend,
             "DICTEE_WHISPER_MODEL": whisper_model,
             "DICTEE_WHISPER_LANG": whisper_lang,
             "DICTEE_VOSK_MODEL": vosk_model,
             "DICTEE_AUDIO_SOURCE": str(audio_source),
+            "DICTEE_PARAKEET_QUANT": _new_parakeet_quant,
         }
         _old_asr_normalized = {k: _old_asr.get(k, "") for k in _new_asr}
         _asr_changed = _new_asr != _old_asr_normalized
