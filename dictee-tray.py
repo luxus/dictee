@@ -234,30 +234,21 @@ def _detect_gpu_vram_gb():
 
 
 def _force_cpu_warning(forcing_cpu, vram_gb):
-    """Return a one-line warning message for the Force CPU toggle, given
-    the toggle state and detected GPU VRAM.
-
-    Mirrors the 6-case logic from dictee-setup.py's _refresh_force_cpu_warning
-    so the wording stays consistent across setup / tray / plasmoid."""
+    """Return a short tooltip line for the Force CPU toggle, given the toggle
+    state and detected GPU VRAM. Kept terse on purpose — the full 6-case
+    explanation lives in dictee-setup.py (where the user has space to read
+    it). The tray and plasmoid only show the essential cue."""
     if forcing_cpu:
         if vram_gb >= 4:
-            return _("⚠ CPU mode forced — losing GPU acceleration "
-                     "({:.1f} GB VRAM available). Parakeet FP32 will "
-                     "be ~6× slower.").format(vram_gb)
+            return _("Force CPU (loses GPU acceleration)")
         if vram_gb > 0:
-            return _("ℹ CPU mode forced — GPU has only {:.1f} GB VRAM, "
-                     "FP32 likely OOM anyway. INT8 on CPU is a reasonable "
-                     "fallback.").format(vram_gb)
-        return _("ℹ No GPU detected — CPU is the only option "
-                 "(this toggle is a no-op).")
-    # Not forcing CPU
+            return _("Force CPU")
+        return _("Force CPU (no GPU anyway)")
     if vram_gb >= 4:
-        return _("✓ GPU acceleration enabled "
-                 "({:.1f} GB VRAM detected).").format(vram_gb)
+        return _("GPU active ({:.1f} GB)").format(vram_gb)
     if vram_gb > 0:
-        return _("⚠ GPU has only {:.1f} GB VRAM — Parakeet FP32 may OOM "
-                 "at load. Consider toggling CPU or using INT8.").format(vram_gb)
-    return _("ℹ No GPU detected — running on CPU regardless of this toggle.")
+        return _("GPU active ({:.1f} GB — low VRAM)").format(vram_gb)
+    return _("No GPU detected")
 
 
 def _sortformer_available():

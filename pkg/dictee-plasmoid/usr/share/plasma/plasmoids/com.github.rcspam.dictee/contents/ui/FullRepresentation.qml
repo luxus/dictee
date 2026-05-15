@@ -875,37 +875,23 @@ RowLayout {
                 if (syncing) return
                 executable.run("dictee-switch-backend force_cpu " + (checked ? "1" : "0"))
             }
-            // Dynamic tooltip: 6 cases (forcing × VRAM tier). Mirrors the
-            // Python _force_cpu_warning() in dictee-tray.py and the
-            // _refresh_force_cpu_warning() in dictee-setup.py — keep wording
-            // consistent across the three UIs.
+            // Short tooltip — same 6 cases as the tray's _force_cpu_warning,
+            // intentionally minimal. The detailed multi-line warning lives in
+            // dictee-setup, not here.
             function _forceCpuWarning() {
                 var vram = root.gpuVramGb
                 if (forceCpuSwitch.checked) {
-                    if (vram >= 4) {
-                        return i18n("⚠ CPU mode forced — losing GPU acceleration "
-                                    + "(%1 GB VRAM available). Parakeet FP32 "
-                                    + "will be ~6× slower.").arg(vram.toFixed(1))
-                    }
-                    if (vram > 0) {
-                        return i18n("ℹ CPU mode forced — GPU has only %1 GB VRAM, "
-                                    + "FP32 likely OOM anyway. INT8 on CPU is a "
-                                    + "reasonable fallback.").arg(vram.toFixed(1))
-                    }
-                    return i18n("ℹ No GPU detected — CPU is the only option "
-                                + "(this toggle is a no-op).")
+                    if (vram >= 4)
+                        return i18n("Force CPU (loses GPU acceleration)")
+                    if (vram > 0)
+                        return i18n("Force CPU")
+                    return i18n("Force CPU (no GPU anyway)")
                 }
-                if (vram >= 4) {
-                    return i18n("✓ GPU acceleration enabled "
-                                + "(%1 GB VRAM detected).").arg(vram.toFixed(1))
-                }
-                if (vram > 0) {
-                    return i18n("⚠ GPU has only %1 GB VRAM — Parakeet FP32 may "
-                                + "OOM at load. Consider toggling CPU or using "
-                                + "INT8.").arg(vram.toFixed(1))
-                }
-                return i18n("ℹ No GPU detected — running on CPU regardless of "
-                            + "this toggle.")
+                if (vram >= 4)
+                    return i18n("GPU active (%1 GB)").arg(vram.toFixed(1))
+                if (vram > 0)
+                    return i18n("GPU active (%1 GB — low VRAM)").arg(vram.toFixed(1))
+                return i18n("No GPU detected")
             }
             QQC2.ToolTip.text: _forceCpuWarning()
             QQC2.ToolTip.visible: hovered
