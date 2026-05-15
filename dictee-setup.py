@@ -46,6 +46,7 @@ try:
         QToolTip, QGridLayout, QTabWidget, QLineEdit, QLayout, QSpinBox,
         QStyledItemDelegate, QStyleOptionViewItem, QStylePainter, QStyleOptionComboBox,
         QListWidget, QListWidgetItem, QDialogButtonBox, QKeySequenceEdit,
+        QGraphicsOpacityEffect,
     )
     from PyQt6.QtMultimedia import QAudioSource, QAudioFormat, QMediaDevices, QMediaPlayer, QAudioOutput
 except ImportError:
@@ -63,6 +64,7 @@ except ImportError:
         QToolTip, QTabWidget, QLineEdit, QLayout, QSpinBox,
         QStyledItemDelegate, QStyleOptionViewItem, QStylePainter, QStyleOptionComboBox,
         QListWidget, QListWidgetItem, QDialogButtonBox, QKeySequenceEdit,
+        QGraphicsOpacityEffect,
     )
     from PySide6.QtMultimedia import QAudioSource, QAudioFormat, QMediaDevices, QMediaPlayer, QAudioOutput
 
@@ -8180,13 +8182,31 @@ class DicteeSetupDialog(QDialog):
             f"</p>"
         )
 
+    def _apply_block_opacity(self, widget, opacity):
+        """Apply or remove QGraphicsOpacityEffect on a widget.
+        opacity >= 1.0 → restore full opacity (effect removed).
+        Otherwise → install an effect that fades the entire widget subtree.
+
+        Note: an opacity effect is created fresh each time so toggling stays
+        reliable (mutating an existing effect can be unstable across Qt
+        versions). The previous effect is dropped by setGraphicsEffect."""
+        if opacity >= 1.0:
+            widget.setGraphicsEffect(None)
+        else:
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(opacity)
+            widget.setGraphicsEffect(effect)
+
     def _refresh_tdt_active_badge(self):
         """Live-update TDT model rows when the toggle flips:
-        - Selected variant: full colour (label + buttons + progress)
-        - Other variant: greyed out (label text + buttons styled grey)
-        The buttons stay functionally enabled (user can still re-install or
-        delete the non-active variant), only their colour is dimmed.
-        Called by ToggleSwitch.toggled — no need to wait for Apply."""
+        - Selected variant: full opacity, normal colour text
+        - Other variant: container faded to opacity 0.45 (label + buttons
+          + progress all greyed together via QGraphicsOpacityEffect)
+
+        Buttons stay functionally clickable (the user can still re-install
+        or delete the non-active variant) but the whole block reads as
+        secondary, matching the toggle position. Called by
+        ToggleSwitch.toggled — no need to wait for Apply."""
         if not hasattr(self, 'tgl_quant'):
             return
         new_active = "int8" if self.tgl_quant.isChecked() else "fp32"
@@ -8199,16 +8219,14 @@ class DicteeSetupDialog(QDialog):
             widgets = self._model_widgets.get(model["id"])
             if not widgets:
                 continue
-            # 1) Refresh the description label (title + sub-line greyed)
+            # 1) Refresh the description label text (badge color follows active state)
             if widgets.get("desc_label"):
                 widgets["desc_label"].setText(
                     self._make_model_label_html(model, new_active, recommended))
-            # 2) Grey out the buttons (still clickable, just visually dimmed)
-            dim_style = "" if is_active else "QPushButton { color: #888; }"
-            for k in ("button", "btn_delete", "btn_cancel"):
-                btn = widgets.get(k)
-                if btn:
-                    btn.setStyleSheet(dim_style)
+            # 2) Fade or restore the whole container (label + buttons + progress)
+            container = widgets.get("container")
+            if container is not None:
+                self._apply_block_opacity(container, 1.0 if is_active else 0.45)
 
     def _build_parakeet_options(self, parent_layout):
         """Build Parakeet + Sortformer model download UI.
@@ -8236,12 +8254,21 @@ class DicteeSetupDialog(QDialog):
             active_quant = recommended_quant
 
         def _build_model_row(layout, model):
-            """Build description label + button row + progress bar for one model."""
+            """Build a model row inside its own container widget. The container
+            is needed so we can apply a QGraphicsOpacityEffect to grey out the
+            entire block (label + buttons + progress) when the variant is
+            non-active. setStyleSheet on individual buttons doesn't visibly
+            grey them on KDE/Plasma styles, hence the container approach."""
             installed = model_is_installed(model)
+
+            container = QWidget()
+            container_lay = QVBoxLayout(container)
+            container_lay.setContentsMargins(0, 0, 0, 0)
+            container_lay.setSpacing(4)
 
             lbl_desc = QLabel(self._make_model_label_html(model, active_quant, recommended_quant))
             lbl_desc.setWordWrap(True)
-            layout.addWidget(lbl_desc)
+            container_lay.addWidget(lbl_desc)
 
             btn_row = QHBoxLayout()
             btn = QPushButton()
@@ -8273,25 +8300,24 @@ class DicteeSetupDialog(QDialog):
             btn_row.addWidget(btn, 1)
             btn_row.addWidget(btn_del)
             btn_row.addWidget(btn_cancel)
-            layout.addLayout(btn_row)
+            container_lay.addLayout(btn_row)
 
             progress = QProgressBar()
             progress.setRange(0, 100)
             progress.setVisible(False)
-            layout.addWidget(progress)
+            container_lay.addWidget(progress)
+
+            layout.addWidget(container)
 
             self._model_widgets[model["id"]] = {
-                "label": None, "desc_label": lbl_desc,
+                "label": None, "desc_label": lbl_desc, "container": container,
                 "button": btn, "btn_delete": btn_del,
                 "btn_cancel": btn_cancel, "progress": progress, "model": model,
             }
-            # Apply initial grey style on buttons if this TDT variant is not active
+            # Apply initial opacity if this TDT variant is not active
             model_quant = model.get("quant")
             if model_quant in ("fp32", "int8") and model_quant != active_quant:
-                dim_style = "QPushButton { color: #888; }"
-                btn.setStyleSheet(dim_style)
-                btn_del.setStyleSheet(dim_style)
-                btn_cancel.setStyleSheet(dim_style)
+                self._apply_block_opacity(container, 0.45)
 
         # === Parakeet group box (no subtitle — the ASR backend combobox already
         # identifies the model family). Just "Parakeet TDT" as section anchor. ===
