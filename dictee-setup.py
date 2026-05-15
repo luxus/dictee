@@ -8132,71 +8132,88 @@ class DicteeSetupDialog(QDialog):
         # that both combos exist and the dictation key has been read.
         self._refresh_shortcut_combos_labels()
 
+    _MODEL_DESCRIPTIONS = {
+        "tdt": "Main transcription model (FP32 full precision). "
+               "Supports 25 languages with native punctuation and capitalization.",
+        "tdt-int8": "Quantized variant. Same 25 languages, ~3.6× smaller, "
+                    "~34 % faster on CPU. Best for CPU-only or low-VRAM GPU.",
+        "sortformer": "Speaker diarization add-on. Identifies up to 4 speakers "
+                      "in a recording. Optional — only needed for speaker identification.",
+    }
+
+    def _make_model_label_html(self, model, active_quant, recommended_quant):
+        """Generate HTML for a model's description label, with ★ Recommended and ACTIVE badges."""
+        installed = model_is_installed(model)
+        model_quant = model.get("quant")
+        badges_html = ""
+        if model_quant and model_quant == recommended_quant:
+            badges_html += (
+                " <span style='color:#d8a000; font-size:10pt; font-weight:bold;'>★ "
+                + _("Recommended") + "</span>"
+            )
+        if model_quant and model_quant == active_quant and installed:
+            badges_html += (
+                " <span style='background:#2a7d3a; color:white; padding:2px 8px;"
+                " border-radius:4px; font-size:10pt; font-weight:bold;'>"
+                + _("ACTIVE") + "</span>"
+            )
+        desc_text = _(self._MODEL_DESCRIPTIONS.get(model["id"], ""))
+        return (f"<p style='font-size: 11pt;'><b>{model['name']}</b>"
+                f"{badges_html} — {desc_text}</p>")
+
+    def _refresh_tdt_active_badge(self):
+        """Live-update ACTIVE badges on TDT model labels when the radio toggle changes.
+        Called by QRadioButton.toggled — no need to wait for Apply."""
+        if not hasattr(self, 'rb_quant_int8'):
+            return
+        new_active = "int8" if self.rb_quant_int8.isChecked() else "fp32"
+        recommended = suggest_parakeet_quant()
+        for model in ASR_MODELS:
+            if model.get("quant") not in ("fp32", "int8"):
+                continue
+            widgets = self._model_widgets.get(model["id"])
+            if widgets and widgets.get("desc_label"):
+                widgets["desc_label"].setText(
+                    self._make_model_label_html(model, new_active, recommended))
+
     def _build_parakeet_options(self, parent_layout):
-        """Build Parakeet model download widgets.
+        """Build Parakeet + Sortformer model download UI.
 
         Layout (top to bottom):
-          - TDT FP32 row (Install/Delete + badges ★ Recommended / ACTIVE)
-          - TDT int8 row (Install/Delete + badges)
-          - "Active Parakeet variant" radio toggle FP32 / int8 (between TDT
-            variants and Sortformer, as per UX plan)
-          - Hardware recommendation footer
-          - Sortformer row (Install/Delete)
+          ┌─ Parakeet TDT — main transcription ──────────┐
+          │  Parakeet TDT FP32 ★/ACTIVE [Install][Del]   │
+          │  Parakeet TDT int8 ★/ACTIVE [Install][Del]   │
+          │  Active variant: (•) int8   ( ) FP32         │
+          │  ★ Recommended for your hardware: <variant>  │
+          └──────────────────────────────────────────────┘
+          ┌─ Sortformer — speaker diarization (optional)┐
+          │  Sortformer [Install][Delete]                │
+          └──────────────────────────────────────────────┘
         """
         self.w_parakeet_options = QWidget()
-        lay_parakeet = QVBoxLayout(self.w_parakeet_options)
-        lay_parakeet.setContentsMargins(0, 4, 0, 0)
-        lay_parakeet.setSpacing(6)
-
-        _model_descriptions = {
-            "tdt": _("Main transcription model (FP32 full precision). "
-                     "Supports 25 languages with native punctuation and capitalization."),
-            "tdt-int8": _("Quantized variant. Same 25 languages, ~3.6× smaller, "
-                          "~34 % faster on CPU. Best for CPU-only or low-VRAM GPU."),
-            "sortformer": _("Speaker diarization add-on. Identifies up to 4 speakers "
-                            "in a recording. Optional — only needed for speaker identification."),
-        }
+        lay_outer = QVBoxLayout(self.w_parakeet_options)
+        lay_outer.setContentsMargins(0, 4, 0, 0)
+        lay_outer.setSpacing(8)
 
         # Hardware-aware recommendation + currently active variant
-        recommended_quant = suggest_parakeet_quant()  # "int8" or "fp32"
+        recommended_quant = suggest_parakeet_quant()
         active_quant = (self.conf.get("DICTEE_PARAKEET_QUANT") or recommended_quant).lower()
         if active_quant not in ("fp32", "int8"):
             active_quant = recommended_quant
 
-        def _build_model_row(model):
+        def _build_model_row(layout, model):
             """Build description label + button row + progress bar for one model."""
             installed = model_is_installed(model)
-            model_quant = model.get("quant")  # "fp32", "int8", or None
 
-            # Build name with badges (★ Recommended / ACTIVE pill)
-            display_name = model["name"]
-            badges_html = ""
-            if model_quant and model_quant == recommended_quant:
-                badges_html += (
-                    " <span style='color:#d8a000; font-size:10pt; font-weight:bold;'>"
-                    "★ " + _("Recommended") + "</span>"
-                )
-            if model_quant and model_quant == active_quant and installed:
-                badges_html += (
-                    " <span style='background:#2a7d3a; color:white; padding:2px 8px;"
-                    " border-radius:4px; font-size:10pt; font-weight:bold;'>"
-                    + _("ACTIVE") + "</span>"
-                )
+            lbl_desc = QLabel(self._make_model_label_html(model, active_quant, recommended_quant))
+            lbl_desc.setWordWrap(True)
+            layout.addWidget(lbl_desc)
 
-            # Description label above the button
-            desc_text = _model_descriptions.get(model["id"], "")
-            if desc_text:
-                lbl_desc = QLabel(f"<p style='font-size: 11pt;'><b>{display_name}</b>{badges_html} — {desc_text}</p>")
-                lbl_desc.setWordWrap(True)
-                lay_parakeet.addWidget(lbl_desc)
-
-            # Button + delete on same row
             btn_row = QHBoxLayout()
             btn = QPushButton()
             self._update_venv_button(btn, model["name"], installed)
             btn.clicked.connect(lambda checked, m=model: self._on_model_download(m))
 
-            # Sortformer requires at least one TDT variant
             if model["id"] == "sortformer":
                 any_tdt_installed = (
                     model_is_installed(ASR_MODELS[0])
@@ -8222,57 +8239,67 @@ class DicteeSetupDialog(QDialog):
             btn_row.addWidget(btn, 1)
             btn_row.addWidget(btn_del)
             btn_row.addWidget(btn_cancel)
-            lay_parakeet.addLayout(btn_row)
+            layout.addLayout(btn_row)
 
             progress = QProgressBar()
             progress.setRange(0, 100)
             progress.setVisible(False)
-            lay_parakeet.addWidget(progress)
+            layout.addWidget(progress)
 
             self._model_widgets[model["id"]] = {
-                "label": None, "button": btn, "btn_delete": btn_del,
+                "label": None, "desc_label": lbl_desc,
+                "button": btn, "btn_delete": btn_del,
                 "btn_cancel": btn_cancel, "progress": progress, "model": model,
             }
 
-        # === TDT variants (FP32 + int8) ===
-        tdt_models = [m for m in ASR_MODELS if m.get("quant") in ("fp32", "int8")]
-        for model in tdt_models:
-            _build_model_row(model)
+        # === Parakeet group box ===
+        parakeet_box = QGroupBox(_("Parakeet TDT — Main transcription model"))
+        parakeet_lay = QVBoxLayout(parakeet_box)
+        parakeet_lay.setContentsMargins(12, 12, 12, 10)
+        parakeet_lay.setSpacing(6)
 
-        # === Active variant radio toggle (between TDT and Sortformer) ===
+        # TDT FP32 + int8 rows
+        for model in [m for m in ASR_MODELS if m.get("quant") in ("fp32", "int8")]:
+            _build_model_row(parakeet_lay, model)
+
+        # Active variant toggle (int8 / FP32) — int8 first per user UX preference
         fp32_installed = model_is_installed(ASR_MODELS[0])
         int8_installed = (
             len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
             and model_is_installed(ASR_MODELS[1])
         )
 
-        toggle_box = QGroupBox(_("Active Parakeet variant"))
-        toggle_lay = QHBoxLayout(toggle_box)
-        toggle_lay.setContentsMargins(10, 6, 10, 6)
-
-        self.rb_quant_fp32 = QRadioButton("FP32")
+        toggle_row = QHBoxLayout()
+        toggle_row.setContentsMargins(0, 6, 0, 0)
+        toggle_row.addWidget(QLabel("<b>" + _("Active variant:") + "</b>"))
         self.rb_quant_int8 = QRadioButton("int8")
-        self.rb_quant_fp32.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
+        self.rb_quant_fp32 = QRadioButton("FP32")
         self.rb_quant_int8.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
+        self.rb_quant_fp32.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
 
-        # Pre-select based on active_quant from conf
+        # Pre-select active variant from conf
         if active_quant == "int8":
             self.rb_quant_int8.setChecked(True)
         else:
             self.rb_quant_fp32.setChecked(True)
 
-        # Disable variants that aren't installed (can't make them active)
+        # Disable un-installed variants (can't make them active)
         self.rb_quant_fp32.setEnabled(fp32_installed)
         self.rb_quant_int8.setEnabled(int8_installed)
-        if fp32_installed and not self.rb_quant_int8.isEnabled():
-            self.rb_quant_fp32.setChecked(True)
-        elif int8_installed and not self.rb_quant_fp32.isEnabled():
+        # If the active variant from conf isn't installed, fall back to the installed one
+        if not self.rb_quant_fp32.isEnabled() and self.rb_quant_int8.isEnabled():
             self.rb_quant_int8.setChecked(True)
+        elif not self.rb_quant_int8.isEnabled() and self.rb_quant_fp32.isEnabled():
+            self.rb_quant_fp32.setChecked(True)
 
-        toggle_lay.addWidget(self.rb_quant_fp32)
-        toggle_lay.addWidget(self.rb_quant_int8)
-        toggle_lay.addStretch()
-        lay_parakeet.addWidget(toggle_box)
+        # Live update of ACTIVE badge when the user toggles
+        self.rb_quant_int8.toggled.connect(self._refresh_tdt_active_badge)
+        self.rb_quant_fp32.toggled.connect(self._refresh_tdt_active_badge)
+
+        toggle_row.addWidget(self.rb_quant_int8)
+        toggle_row.addWidget(self.rb_quant_fp32)
+        toggle_row.addStretch()
+        parakeet_lay.addLayout(toggle_row)
 
         # Hardware recommendation footer
         total_vram, _free = get_gpu_vram_gb()
@@ -8288,12 +8315,20 @@ class DicteeSetupDialog(QDialog):
             + f" <b>{recommended_quant}</b> &mdash; {reason}</p>"
         )
         lbl_reco.setWordWrap(True)
-        lay_parakeet.addWidget(lbl_reco)
+        parakeet_lay.addWidget(lbl_reco)
 
-        # === Sortformer (after the active variant toggle) ===
-        sortformer_models = [m for m in ASR_MODELS if m["id"] == "sortformer"]
-        for model in sortformer_models:
-            _build_model_row(model)
+        lay_outer.addWidget(parakeet_box)
+
+        # === Sortformer group box (separate) ===
+        sortformer_box = QGroupBox(_("Sortformer — Speaker diarization (optional)"))
+        sortformer_lay = QVBoxLayout(sortformer_box)
+        sortformer_lay.setContentsMargins(12, 12, 12, 10)
+        sortformer_lay.setSpacing(6)
+
+        for model in [m for m in ASR_MODELS if m["id"] == "sortformer"]:
+            _build_model_row(sortformer_lay, model)
+
+        lay_outer.addWidget(sortformer_box)
 
         parent_layout.addWidget(self.w_parakeet_options)
 
