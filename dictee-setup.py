@@ -8135,15 +8135,13 @@ class DicteeSetupDialog(QDialog):
     def _build_parakeet_options(self, parent_layout):
         """Build Parakeet model download widgets.
 
-        Layout:
-          - One row per ASR_MODELS entry (TDT FP32, TDT int8, Sortformer)
-            with [Install] / [Delete] / [Cancel] / progress bar.
-          - Badge "★ Recommended" on the variant suggested by hardware detection.
-          - Badge "(active)" on the variant currently selected by
-            DICTEE_PARAKEET_QUANT in dictee.conf.
-          - At the bottom: combobox "Active Parakeet variant" to switch between
-            installed variants. Disabled if 0 or 1 TDT variant is installed.
-          - Footer label "Recommended for your hardware: <fp32|int8>" with reason.
+        Layout (top to bottom):
+          - TDT FP32 row (Install/Delete + badges ★ Recommended / ACTIVE)
+          - TDT int8 row (Install/Delete + badges)
+          - "Active Parakeet variant" radio toggle FP32 / int8 (between TDT
+            variants and Sortformer, as per UX plan)
+          - Hardware recommendation footer
+          - Sortformer row (Install/Delete)
         """
         self.w_parakeet_options = QWidget()
         lay_parakeet = QVBoxLayout(self.w_parakeet_options)
@@ -8165,44 +8163,49 @@ class DicteeSetupDialog(QDialog):
         if active_quant not in ("fp32", "int8"):
             active_quant = recommended_quant
 
-        for model in ASR_MODELS:
+        def _build_model_row(model):
+            """Build description label + button row + progress bar for one model."""
             installed = model_is_installed(model)
-            model_quant = model.get("quant")  # "fp32", "int8", or None for non-TDT
+            model_quant = model.get("quant")  # "fp32", "int8", or None
 
-            # Build name with badges (★ recommended / active)
+            # Build name with badges (★ Recommended / ACTIVE pill)
             display_name = model["name"]
-            badges = []
+            badges_html = ""
             if model_quant and model_quant == recommended_quant:
-                badges.append("★ Recommended")
+                badges_html += (
+                    " <span style='color:#d8a000; font-size:10pt; font-weight:bold;'>"
+                    "★ " + _("Recommended") + "</span>"
+                )
             if model_quant and model_quant == active_quant and installed:
-                badges.append(_("active"))
-            badge_html = ""
-            if badges:
-                badge_html = " <span style='color:#3a7;font-weight:normal;font-size:9pt;'>(" + " · ".join(badges) + ")</span>"
+                badges_html += (
+                    " <span style='background:#2a7d3a; color:white; padding:2px 8px;"
+                    " border-radius:4px; font-size:10pt; font-weight:bold;'>"
+                    + _("ACTIVE") + "</span>"
+                )
 
             # Description label above the button
             desc_text = _model_descriptions.get(model["id"], "")
             if desc_text:
-                lbl_desc = QLabel(f"<p style='font-size: 11pt;'><b>{display_name}</b>{badge_html} — {desc_text}</p>")
+                lbl_desc = QLabel(f"<p style='font-size: 11pt;'><b>{display_name}</b>{badges_html} — {desc_text}</p>")
                 lbl_desc.setWordWrap(True)
                 lay_parakeet.addWidget(lbl_desc)
 
             # Button + delete on same row
             btn_row = QHBoxLayout()
-
             btn = QPushButton()
             self._update_venv_button(btn, model["name"], installed)
             btn.clicked.connect(lambda checked, m=model: self._on_model_download(m))
 
             # Sortformer requires at least one TDT variant
-            any_tdt_installed = (
-                model_is_installed(ASR_MODELS[0])  # tdt fp32
-                or (len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
-                    and model_is_installed(ASR_MODELS[1]))
-            )
-            if model["id"] == "sortformer" and not any_tdt_installed and not installed:
-                btn.setEnabled(False)
-                btn.setToolTip(_("Requires Parakeet-TDT 0.6B v3 (FP32 or int8) to be installed first"))
+            if model["id"] == "sortformer":
+                any_tdt_installed = (
+                    model_is_installed(ASR_MODELS[0])
+                    or (len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
+                        and model_is_installed(ASR_MODELS[1]))
+                )
+                if not any_tdt_installed and not installed:
+                    btn.setEnabled(False)
+                    btn.setToolTip(_("Requires Parakeet-TDT 0.6B v3 (FP32 or int8) to be installed first"))
 
             btn_del = QPushButton()
             btn_del.setIcon(QIcon.fromTheme("edit-delete"))
@@ -8231,41 +8234,47 @@ class DicteeSetupDialog(QDialog):
                 "btn_cancel": btn_cancel, "progress": progress, "model": model,
             }
 
-        # Active variant combobox (only meaningful when both variants installed)
+        # === TDT variants (FP32 + int8) ===
+        tdt_models = [m for m in ASR_MODELS if m.get("quant") in ("fp32", "int8")]
+        for model in tdt_models:
+            _build_model_row(model)
+
+        # === Active variant radio toggle (between TDT and Sortformer) ===
         fp32_installed = model_is_installed(ASR_MODELS[0])
-        int8_installed = (len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
-                         and model_is_installed(ASR_MODELS[1]))
+        int8_installed = (
+            len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
+            and model_is_installed(ASR_MODELS[1])
+        )
 
-        quant_row = QHBoxLayout()
-        quant_row.setContentsMargins(0, 8, 0, 0)
-        lbl_active = QLabel(_("Active Parakeet variant:"))
-        quant_row.addWidget(lbl_active)
-        self.cmb_parakeet_quant = QComboBox()
-        self.cmb_parakeet_quant.addItem("FP32", "fp32")
-        self.cmb_parakeet_quant.addItem("int8", "int8")
-        # Pre-select active variant (auto-resolve if only one installed)
-        if fp32_installed and not int8_installed:
-            self.cmb_parakeet_quant.setCurrentIndex(0)
-            self.cmb_parakeet_quant.setEnabled(False)
-            lbl_active.setEnabled(False)
-        elif int8_installed and not fp32_installed:
-            self.cmb_parakeet_quant.setCurrentIndex(1)
-            self.cmb_parakeet_quant.setEnabled(False)
-            lbl_active.setEnabled(False)
-        elif fp32_installed and int8_installed:
-            idx = 1 if active_quant == "int8" else 0
-            self.cmb_parakeet_quant.setCurrentIndex(idx)
-            self.cmb_parakeet_quant.setEnabled(True)
+        toggle_box = QGroupBox(_("Active Parakeet variant"))
+        toggle_lay = QHBoxLayout(toggle_box)
+        toggle_lay.setContentsMargins(10, 6, 10, 6)
+
+        self.rb_quant_fp32 = QRadioButton("FP32")
+        self.rb_quant_int8 = QRadioButton("int8")
+        self.rb_quant_fp32.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
+        self.rb_quant_int8.setStyleSheet("QRadioButton { font-size: 11pt; padding: 4px 12px; }")
+
+        # Pre-select based on active_quant from conf
+        if active_quant == "int8":
+            self.rb_quant_int8.setChecked(True)
         else:
-            # Neither installed yet — default to recommended, disabled until install
-            idx = 1 if recommended_quant == "int8" else 0
-            self.cmb_parakeet_quant.setCurrentIndex(idx)
-            self.cmb_parakeet_quant.setEnabled(False)
-            lbl_active.setEnabled(False)
-        quant_row.addWidget(self.cmb_parakeet_quant, 1)
-        lay_parakeet.addLayout(quant_row)
+            self.rb_quant_fp32.setChecked(True)
 
-        # Footer recommendation label
+        # Disable variants that aren't installed (can't make them active)
+        self.rb_quant_fp32.setEnabled(fp32_installed)
+        self.rb_quant_int8.setEnabled(int8_installed)
+        if fp32_installed and not self.rb_quant_int8.isEnabled():
+            self.rb_quant_fp32.setChecked(True)
+        elif int8_installed and not self.rb_quant_fp32.isEnabled():
+            self.rb_quant_int8.setChecked(True)
+
+        toggle_lay.addWidget(self.rb_quant_fp32)
+        toggle_lay.addWidget(self.rb_quant_int8)
+        toggle_lay.addStretch()
+        lay_parakeet.addWidget(toggle_box)
+
+        # Hardware recommendation footer
         total_vram, _free = get_gpu_vram_gb()
         if total_vram >= 4:
             reason = _("GPU with {:.1f} GB VRAM detected — FP32 is fastest on CUDA").format(total_vram)
@@ -8274,12 +8283,17 @@ class DicteeSetupDialog(QDialog):
         else:
             reason = _("No GPU detected — int8 is ~34 % faster on CPU (AVX-VNNI)")
         lbl_reco = QLabel(
-            f"<p style='font-size: 9pt; color: #7a7;'>★ "
+            f"<p style='font-size: 9pt; color: #7a7; padding-left: 4px;'>★ "
             + _("Recommended for your hardware:")
             + f" <b>{recommended_quant}</b> &mdash; {reason}</p>"
         )
         lbl_reco.setWordWrap(True)
         lay_parakeet.addWidget(lbl_reco)
+
+        # === Sortformer (after the active variant toggle) ===
+        sortformer_models = [m for m in ASR_MODELS if m["id"] == "sortformer"]
+        for model in sortformer_models:
+            _build_model_row(model)
 
         parent_layout.addWidget(self.w_parakeet_options)
 
@@ -17823,8 +17837,14 @@ class DicteeSetupDialog(QDialog):
                         self.cmb_trpp_short_text_max.currentData()
                         if hasattr(self, 'cmb_trpp_short_text_max') else 3) or 3,
                     parakeet_quant=(
-                        self.cmb_parakeet_quant.currentData()
-                        if hasattr(self, 'cmb_parakeet_quant') and self.cmb_parakeet_quant.isEnabled()
+                        # Always read the radio's current state, even if the
+                        # variant is auto-resolved (single install) — so that
+                        # DICTEE_PARAKEET_QUANT is written to dictee.conf and
+                        # the daemon loads the correct variant on restart.
+                        "int8" if (hasattr(self, 'rb_quant_int8')
+                                   and self.rb_quant_int8.isChecked())
+                        else "fp32" if (hasattr(self, 'rb_quant_fp32')
+                                        and self.rb_quant_fp32.isChecked())
                         else None),
                     mark_setup_done=mark_setup_done)
 
