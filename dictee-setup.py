@@ -380,6 +380,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 command_suffixes=None, debug=False,
                 trpp_states=None, trpp_short_text_max=3,
                 cheatsheet_mod="", cheatsheet_key_seq="",
+                parakeet_quant=None,
                 mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
@@ -404,6 +405,10 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
         "DICTEE_ANIM_PLASMOID": "true" if anim_plasmoid else "false",
         "DICTEE_VOSK_MODEL": _s(vosk_code),
         "DICTEE_WHISPER_MODEL": _s(whisper_model),
+        # Parakeet quantization variant (int8 | fp32). None = leave dictee.conf
+        # untouched (preserve existing user value or comment).
+        **({"DICTEE_PARAKEET_QUANT": parakeet_quant}
+           if parakeet_quant in ("fp32", "int8") else {}),
         "DICTEE_PTT_MODE": ptt_mode,
         "DICTEE_PTT_KEY": str(ptt_key),
         "DICTEE_POSTPROCESS": "true" if postprocess else "false",
@@ -981,6 +986,26 @@ def get_gpu_vram_gb():
     except (OSError, ValueError):
         pass
     return 0, 0
+
+
+def suggest_parakeet_quant():
+    """Recommend Parakeet quantization variant based on detected hardware.
+
+    Returns:
+      "int8" — for CPU-only systems or GPU with < 4 GB VRAM.
+              On CPU with AVX-VNNI, int8 is ~34 % faster than FP32 (measured
+              on i7-13700H, audio 16 s, 2026-05-15).
+      "fp32" — for GPU with ≥ 4 GB VRAM. On CUDA, FP32 is ~6× faster than
+              int8 (current ORT CUDA EP doesn't optimize int8 ops well).
+
+    The user can always override via DICTEE_PARAKEET_QUANT env var or the
+    "Active Parakeet variant" combobox in dictee-setup.
+    """
+    total_gb, _free = get_gpu_vram_gb()
+    if total_gb < 4:
+        # CPU-only (0 GB) or low-VRAM GPU (< 4 GB → FP32 risks OOM)
+        return "int8"
+    return "fp32"
 
 
 def check_cuda_gpu_ready():
@@ -1885,19 +1910,21 @@ class _RuleTranscribeThread(QThread):
 ASR_MODELS = [
     {
         "id": "tdt",
-        "name": "Parakeet-TDT 0.6B v3",
-        "desc": _("Multilingual transcription (25 languages, ~2.5 GB)"),
+        "name": "Parakeet-TDT 0.6B v3 (FP32)",
+        "desc": _("Multilingual transcription (25 languages, ~2.5 GB) — best accuracy, recommended for GPU"),
         "help": _(
-            "<b>Parakeet-TDT 0.6B v3</b> — Main transcription model<br><br>"
+            "<b>Parakeet-TDT 0.6B v3 — FP32</b><br><br>"
+            "Full-precision variant of the main transcription model.<br>"
             "FastConformer encoder + Token-and-Duration Transducer (TDT) decoder.<br>"
             "Supports <b>25 languages</b> including French, English, Spanish, German, etc.<br>"
             "Native punctuation and capitalization (no post-processing needed).<br><br>"
-            "<b>Required</b> for all transcription modes (dictation, batch, daemon).<br>"
+            "Recommended for <b>GPU with ≥ 4 GB VRAM</b> — fastest on CUDA Tensor Cores.<br>"
             "Used by: <code>transcribe</code>, <code>transcribe-daemon</code>, "
             "<code>transcribe-diarize</code>, <code>dictee</code>"
         ),
         "dir": os.path.join(MODEL_DIR, "tdt"),
         "check_file": "encoder-model.onnx",
+        "quant": "fp32",
         "files": [
             ("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.onnx", "encoder-model.onnx"),
             ("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.onnx.data", "encoder-model.onnx.data"),
@@ -1905,6 +1932,29 @@ ASR_MODELS = [
             ("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt", "vocab.txt"),
         ],
         "required": True,
+    },
+    {
+        "id": "tdt-int8",
+        "name": "Parakeet-TDT 0.6B v3 (int8)",
+        "desc": _("Quantized variant (~670 MB) — recommended for CPU and low-VRAM GPU"),
+        "help": _(
+            "<b>Parakeet-TDT 0.6B v3 — int8 quantized</b><br><br>"
+            "Same architecture as FP32 with 8-bit quantized weights.<br><br>"
+            "<b>~3.6× smaller</b>: 670 MB on disk / RAM (vs 2.4 GB FP32).<br>"
+            "<b>~38% faster on CPU</b> with AVX-VNNI (Intel Cascade Lake+ / AMD Zen 2+).<br>"
+            "<b>WER loss negligible</b> (~0-1 % depending on audio).<br><br>"
+            "Recommended for: <b>CPU-only systems</b> or <b>GPU with &lt; 4 GB VRAM</b>.<br>"
+            "Note: on GPU with abundant VRAM, FP32 is faster (CUDA int8 EP is slow)."
+        ),
+        "dir": os.path.join(MODEL_DIR, "tdt"),  # same dir as FP32, coexistence supported
+        "check_file": "encoder-model.int8.onnx",
+        "quant": "int8",
+        "files": [
+            ("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.int8.onnx", "encoder-model.int8.onnx"),
+            ("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.int8.onnx", "decoder_joint-model.int8.onnx"),
+            ("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt", "vocab.txt"),
+        ],
+        "required": False,
     },
     {
         "id": "sortformer",
@@ -8083,26 +8133,57 @@ class DicteeSetupDialog(QDialog):
         self._refresh_shortcut_combos_labels()
 
     def _build_parakeet_options(self, parent_layout):
-        """Build Parakeet model download widgets."""
+        """Build Parakeet model download widgets.
+
+        Layout:
+          - One row per ASR_MODELS entry (TDT FP32, TDT int8, Sortformer)
+            with [Install] / [Delete] / [Cancel] / progress bar.
+          - Badge "★ Recommended" on the variant suggested by hardware detection.
+          - Badge "(active)" on the variant currently selected by
+            DICTEE_PARAKEET_QUANT in dictee.conf.
+          - At the bottom: combobox "Active Parakeet variant" to switch between
+            installed variants. Disabled if 0 or 1 TDT variant is installed.
+          - Footer label "Recommended for your hardware: <fp32|int8>" with reason.
+        """
         self.w_parakeet_options = QWidget()
         lay_parakeet = QVBoxLayout(self.w_parakeet_options)
         lay_parakeet.setContentsMargins(0, 4, 0, 0)
         lay_parakeet.setSpacing(6)
 
         _model_descriptions = {
-            "tdt": _("Main transcription model. Required for all dictation modes. "
+            "tdt": _("Main transcription model (FP32 full precision). "
                      "Supports 25 languages with native punctuation and capitalization."),
+            "tdt-int8": _("Quantized variant. Same 25 languages, ~3.6× smaller, "
+                          "~34 % faster on CPU. Best for CPU-only or low-VRAM GPU."),
             "sortformer": _("Speaker diarization add-on. Identifies up to 4 speakers "
                             "in a recording. Optional — only needed for speaker identification."),
         }
 
+        # Hardware-aware recommendation + currently active variant
+        recommended_quant = suggest_parakeet_quant()  # "int8" or "fp32"
+        active_quant = (self.conf.get("DICTEE_PARAKEET_QUANT") or recommended_quant).lower()
+        if active_quant not in ("fp32", "int8"):
+            active_quant = recommended_quant
+
         for model in ASR_MODELS:
             installed = model_is_installed(model)
+            model_quant = model.get("quant")  # "fp32", "int8", or None for non-TDT
+
+            # Build name with badges (★ recommended / active)
+            display_name = model["name"]
+            badges = []
+            if model_quant and model_quant == recommended_quant:
+                badges.append("★ Recommended")
+            if model_quant and model_quant == active_quant and installed:
+                badges.append(_("active"))
+            badge_html = ""
+            if badges:
+                badge_html = " <span style='color:#3a7;font-weight:normal;font-size:9pt;'>(" + " · ".join(badges) + ")</span>"
 
             # Description label above the button
             desc_text = _model_descriptions.get(model["id"], "")
             if desc_text:
-                lbl_desc = QLabel(f"<p style='font-size: 11pt;'><b>{model['name']}</b> — {desc_text}</p>")
+                lbl_desc = QLabel(f"<p style='font-size: 11pt;'><b>{display_name}</b>{badge_html} — {desc_text}</p>")
                 lbl_desc.setWordWrap(True)
                 lay_parakeet.addWidget(lbl_desc)
 
@@ -8113,11 +8194,15 @@ class DicteeSetupDialog(QDialog):
             self._update_venv_button(btn, model["name"], installed)
             btn.clicked.connect(lambda checked, m=model: self._on_model_download(m))
 
-            # Sortformer requires TDT
-            tdt_installed = model_is_installed(ASR_MODELS[0])
-            if model["id"] == "sortformer" and not tdt_installed and not installed:
+            # Sortformer requires at least one TDT variant
+            any_tdt_installed = (
+                model_is_installed(ASR_MODELS[0])  # tdt fp32
+                or (len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
+                    and model_is_installed(ASR_MODELS[1]))
+            )
+            if model["id"] == "sortformer" and not any_tdt_installed and not installed:
                 btn.setEnabled(False)
-                btn.setToolTip(_("Requires Parakeet-TDT 0.6B v3 to be installed first"))
+                btn.setToolTip(_("Requires Parakeet-TDT 0.6B v3 (FP32 or int8) to be installed first"))
 
             btn_del = QPushButton()
             btn_del.setIcon(QIcon.fromTheme("edit-delete"))
@@ -8145,6 +8230,56 @@ class DicteeSetupDialog(QDialog):
                 "label": None, "button": btn, "btn_delete": btn_del,
                 "btn_cancel": btn_cancel, "progress": progress, "model": model,
             }
+
+        # Active variant combobox (only meaningful when both variants installed)
+        fp32_installed = model_is_installed(ASR_MODELS[0])
+        int8_installed = (len(ASR_MODELS) > 1 and ASR_MODELS[1].get("quant") == "int8"
+                         and model_is_installed(ASR_MODELS[1]))
+
+        quant_row = QHBoxLayout()
+        quant_row.setContentsMargins(0, 8, 0, 0)
+        lbl_active = QLabel(_("Active Parakeet variant:"))
+        quant_row.addWidget(lbl_active)
+        self.cmb_parakeet_quant = QComboBox()
+        self.cmb_parakeet_quant.addItem("FP32", "fp32")
+        self.cmb_parakeet_quant.addItem("int8", "int8")
+        # Pre-select active variant (auto-resolve if only one installed)
+        if fp32_installed and not int8_installed:
+            self.cmb_parakeet_quant.setCurrentIndex(0)
+            self.cmb_parakeet_quant.setEnabled(False)
+            lbl_active.setEnabled(False)
+        elif int8_installed and not fp32_installed:
+            self.cmb_parakeet_quant.setCurrentIndex(1)
+            self.cmb_parakeet_quant.setEnabled(False)
+            lbl_active.setEnabled(False)
+        elif fp32_installed and int8_installed:
+            idx = 1 if active_quant == "int8" else 0
+            self.cmb_parakeet_quant.setCurrentIndex(idx)
+            self.cmb_parakeet_quant.setEnabled(True)
+        else:
+            # Neither installed yet — default to recommended, disabled until install
+            idx = 1 if recommended_quant == "int8" else 0
+            self.cmb_parakeet_quant.setCurrentIndex(idx)
+            self.cmb_parakeet_quant.setEnabled(False)
+            lbl_active.setEnabled(False)
+        quant_row.addWidget(self.cmb_parakeet_quant, 1)
+        lay_parakeet.addLayout(quant_row)
+
+        # Footer recommendation label
+        total_vram, _free = get_gpu_vram_gb()
+        if total_vram >= 4:
+            reason = _("GPU with {:.1f} GB VRAM detected — FP32 is fastest on CUDA").format(total_vram)
+        elif total_vram > 0:
+            reason = _("GPU with only {:.1f} GB VRAM — FP32 may OOM, int8 fits").format(total_vram)
+        else:
+            reason = _("No GPU detected — int8 is ~34 % faster on CPU (AVX-VNNI)")
+        lbl_reco = QLabel(
+            f"<p style='font-size: 9pt; color: #7a7;'>★ "
+            + _("Recommended for your hardware:")
+            + f" <b>{recommended_quant}</b> &mdash; {reason}</p>"
+        )
+        lbl_reco.setWordWrap(True)
+        lay_parakeet.addWidget(lbl_reco)
 
         parent_layout.addWidget(self.w_parakeet_options)
 
@@ -17687,6 +17822,10 @@ class DicteeSetupDialog(QDialog):
                     trpp_short_text_max=(
                         self.cmb_trpp_short_text_max.currentData()
                         if hasattr(self, 'cmb_trpp_short_text_max') else 3) or 3,
+                    parakeet_quant=(
+                        self.cmb_parakeet_quant.currentData()
+                        if hasattr(self, 'cmb_parakeet_quant') and self.cmb_parakeet_quant.isEnabled()
+                        else None),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.

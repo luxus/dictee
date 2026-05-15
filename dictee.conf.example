@@ -150,6 +150,23 @@ DICTEE_AUDIO_CONTEXT=true
 DICTEE_AUDIO_CONTEXT_TIMEOUT=30
 
 # ============================================================================
+# Parakeet quantization (advanced)
+# ============================================================================
+
+# Parakeet TDT model variant: int8 | fp32
+# - int8: ~670 MB, faster on CPU with AVX-VNNI (-38 % latency measured),
+#   negligible WER loss (~0-1 % depending on audio).
+# - fp32: ~2.4 GB, best accuracy and fastest on GPU (CUDA Tensor Cores
+#   don't benefit from int8 quantization in current ONNX Runtime).
+# Recommended:
+#   - CPU-only or low-VRAM GPU (< 4 GB): int8
+#   - GPU with ≥ 4 GB VRAM: fp32
+# The model files must be present on disk (~/.local/share/dictee/tdt/
+# or /usr/share/dictee/tdt/). If both variants are installed, this var
+# selects which one the daemon loads at startup.
+#DICTEE_PARAKEET_QUANT=int8
+
+# ============================================================================
 # ORT threading (advanced)
 # ============================================================================
 
