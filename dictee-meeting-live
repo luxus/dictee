@@ -416,6 +416,59 @@ class AlignerWorker(QObject):
 
 
 # ---------------------------------------------------------------------------
+# LLM summary worker
+# ---------------------------------------------------------------------------
+
+class FinalizerWorker(QThread):
+    """Runs dictee-diarize-llm with the chosen profile on transcript-live.md.
+
+    Output goes to summary.md in the meeting folder.
+    Uses dictee-diarize-llm (not dictee-postprocess) because the profiles
+    synthese/chapitrage/correction-asr are defined there.
+    Input is the full transcript file via stdin (--input -).
+    """
+
+    done = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, transcript_path: Path, summary_path: Path, profile: str):
+        super().__init__()
+        self.transcript_path = transcript_path
+        self.summary_path = summary_path
+        self.profile = profile
+
+    def run(self):
+        try:
+            content = self.transcript_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            self.error.emit(f"Transcript introuvable : {self.transcript_path}")
+            return
+
+        cmd = ["dictee-diarize-llm", "--profile", self.profile, "--input", "-"]
+        try:
+            proc = subprocess.run(
+                cmd,
+                input=content,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if proc.returncode != 0:
+                self.error.emit(
+                    f"dictee-diarize-llm exit {proc.returncode}: {proc.stderr.strip()}"
+                )
+                return
+            self.summary_path.write_text(proc.stdout, encoding="utf-8")
+            self.done.emit(str(self.summary_path))
+        except subprocess.TimeoutExpired:
+            self.error.emit("LLM timeout (>5 min)")
+        except FileNotFoundError:
+            self.error.emit("dictee-diarize-llm introuvable")
+        except Exception as e:
+            self.error.emit(f"FinalizerWorker : {e}")
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -633,8 +686,25 @@ class MeetingWindow(QMainWindow):
         self._run_llm_summary()
 
     def _run_llm_summary(self):
-        # Placeholder. Real implementation in Task 11.
-        pass
+        if not self.meeting_dir or not self.transcript_path:
+            return
+        self.status_label.setText("Synthèse LLM en cours…")
+        summary_path = self.meeting_dir / "summary.md"
+        self.finalizer = FinalizerWorker(
+            self.transcript_path,
+            summary_path,
+            self.profile_combo.currentText(),
+        )
+        self.finalizer.done.connect(self._on_summary_done)
+        self.finalizer.error.connect(self._on_error_msg)
+        self.finalizer.start()
+
+    def _on_summary_done(self, path: str):
+        self.status_label.setText(f"Synthèse prête : {path}")
+        try:
+            subprocess.Popen(["xdg-open", path])
+        except FileNotFoundError:
+            pass
 
     def _reset_state(self):
         try:
