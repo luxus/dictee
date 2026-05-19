@@ -30,9 +30,16 @@ Each meeting creates a folder:
 
 Transcripts, summaries and exports are produced by dictee-transcribe and saved there too.
 
+## Live preview (optional)
+
+The capture window has a collapsible "Live preview" section. Expand it to see the transcript stream chunk-by-chunk (~40 s intervals) as you record. This is a preview — the real transcription + diarization is done by the dictation window that opens at Stop.
+
+You can adjust the chunk duration (20–60 s) in dictee-setup → Meeting page.
+
 ## Settings (dictee-setup → Meeting page)
 
 - **Save folder**: default `~/.local/share/dictee/meetings/`
+- **Live preview chunk duration**: interval between live preview updates (default 40 s, range 20–60 s)
 
 ## Troubleshooting
 

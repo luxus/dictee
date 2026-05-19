@@ -30,9 +30,16 @@ Chaque réunion crée un dossier :
 
 Les transcriptions, synthèses et exports sont produits par dictee-transcribe et enregistrés dans ce dossier.
 
+## Aperçu en direct (optionnel)
+
+La fenêtre de capture dispose d'une section « Aperçu en direct » repliable. Dépliez-la pour voir la transcription s'afficher fragment par fragment (~40 s d'intervalle) pendant l'enregistrement. Il s'agit d'un aperçu bonus — la vraie transcription + diarisation est effectuée par la fenêtre de dictée qui s'ouvre à l'arrêt.
+
+La durée des fragments (20–60 s) est réglable dans dictee-setup → page Réunion.
+
 ## Paramètres (dictee-setup → page Réunion)
 
 - **Dossier de sauvegarde** : par défaut `~/.local/share/dictee/meetings/`
+- **Durée des fragments de l'aperçu en direct** : intervalle entre les mises à jour de l'aperçu (défaut 40 s, plage 20–60 s)
 
 ## Dépannage
 

@@ -385,6 +385,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 parakeet_quant=None,
                 force_cpu=None,
                 meeting_dir="",
+                meeting_chunk_s=40,
                 mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
@@ -538,6 +539,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
     # Live meeting settings
     if meeting_dir:
         values["DICTEE_MEETING_DIR"] = _s(meeting_dir)
+    values["DICTEE_MEETING_CHUNK_S"] = str(max(20, min(60, int(meeting_chunk_s))))
 
     # Keys that must be re-commented when absent from values.
     # Without this, a previously active key stays active forever.
@@ -5820,6 +5822,20 @@ class DicteeSetupDialog(QDialog):
                                        ".local", "share", "dictee", "meetings"))
         )
         layout.addWidget(self.led_meeting_dir)
+
+        layout.addSpacing(12)
+        layout.addWidget(QLabel(_("Live preview chunk duration (seconds):")))
+        self.sld_chunk = QSlider(Qt.Orientation.Horizontal)
+        self.sld_chunk.setMinimum(20)
+        self.sld_chunk.setMaximum(60)
+        try:
+            self.sld_chunk.setValue(int(self.conf.get("DICTEE_MEETING_CHUNK_S", "40")))
+        except ValueError:
+            self.sld_chunk.setValue(40)
+        self.lbl_chunk = QLabel(f"{self.sld_chunk.value()} s")
+        self.sld_chunk.valueChanged.connect(lambda v: self.lbl_chunk.setText(f"{v} s"))
+        layout.addWidget(self.sld_chunk)
+        layout.addWidget(self.lbl_chunk)
 
         layout.addStretch()
         return page
@@ -18064,6 +18080,9 @@ class DicteeSetupDialog(QDialog):
                     meeting_dir=(
                         self.led_meeting_dir.text()
                         if hasattr(self, 'led_meeting_dir') else ""),
+                    meeting_chunk_s=(
+                        self.sld_chunk.value()
+                        if hasattr(self, 'sld_chunk') else 40),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.
