@@ -670,6 +670,11 @@ def run_evdev(ptt):
                             ui.write_event(event)
                             continue
 
+                        # Meeting live active: forward keys, don't consume
+                        if read_state() == "meeting-recording":
+                            ui.write_event(event)
+                            continue
+
                         # Pause marker: when dictee-setup captures a shortcut
                         # (F8/F9 etc), it creates this file so we forward every
                         # key to Qt instead of consuming the configured PTT keys.
