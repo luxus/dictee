@@ -617,21 +617,25 @@ class MeetingWindow(QMainWindow):
                 if spk == -1:
                     continue
                 self.speakers_seen.add(spk)
-                t = self._fmt_time(ln["start_s"])
-                f.write(f"**[Speaker {spk}]** ({t}) {ln['text']}\n\n")
+                f.write(f"[{ln['start_s']:.3f}s - {ln['end_s']:.3f}s] Speaker {spk}: {ln['text']}\n")
 
     def _reload_transcript(self):
+        import re
+        spk_pattern = re.compile(r"^\[(\d+\.?\d*)s\s*-\s*(\d+\.?\d*)s\]\s*Speaker\s+(\d+):\s*(.*)$")
         try:
             content = self.transcript_path.read_text(encoding="utf-8")
             html_lines = []
             for line in content.split("\n"):
-                if line.startswith("**[Speaker "):
-                    try:
-                        spk_id = int(line.split("[Speaker ")[1].split("]")[0])
-                        color = self.SPEAKER_COLORS[spk_id % len(self.SPEAKER_COLORS)]
-                        html_lines.append(f'<p style="color:{color}">{line}</p>')
-                    except (IndexError, ValueError):
-                        html_lines.append(f"<p>{line}</p>")
+                m = spk_pattern.match(line)
+                if m:
+                    start_s, _end_s, spk_id, text = m.groups()
+                    spk_id = int(spk_id)
+                    color = self.SPEAKER_COLORS[spk_id % len(self.SPEAKER_COLORS)]
+                    t = self._fmt_time(float(start_s))
+                    html_lines.append(
+                        f'<p style="color:{color}"><b>[Speaker {spk_id}]</b> '
+                        f'<span style="color:#888">({t})</span> {text}</p>'
+                    )
                 else:
                     html_lines.append(f"<p>{line}</p>")
             self.transcript_view.setHtml("\n".join(html_lines))
@@ -687,6 +691,18 @@ class MeetingWindow(QMainWindow):
 
     def _run_llm_summary(self):
         if not self.meeting_dir or not self.transcript_path:
+            return
+        # Check we have at least one diarized line before invoking LLM
+        try:
+            content = self.transcript_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            self.status_label.setText("Pas de transcript à synthétiser.")
+            return
+        import re
+        if not re.search(r"^\[\d+\.?\d*s\s*-", content, re.MULTILINE):
+            self.status_label.setText(
+                f"Réunion trop courte ({self.elapsed_seconds}s) — pas de synthèse"
+            )
             return
         self.status_label.setText("Synthèse LLM en cours…")
         summary_path = self.meeting_dir / "summary.md"
