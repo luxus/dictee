@@ -210,6 +210,122 @@ class TranscriptionWorker(QObject):
             self.error.emit(chunk_id, f"JSON parse error: {e}")
 
 
+class DiarizationWorker(QObject):
+    """Keeps diarize-only --stream alive and sends chunks via stdin.
+
+    Emits (chunk_id, segments) where segments = [{"start_s", "end_s", "speaker_id"}, ...]
+    Sortformer state is preserved between chunks → stable speaker IDs.
+    """
+
+    diarized = pyqtSignal(int, list)
+    error = pyqtSignal(int, str)
+
+    def __init__(self, sortformer_dir: str = None):
+        super().__init__()
+        self.proc = None
+        self.sortformer_dir = sortformer_dir
+
+    def start(self) -> bool:
+        """Launch the subprocess. Returns True if ready, False on failure."""
+        cmd = ["diarize-only", "--stream"]
+        if self.sortformer_dir:
+            cmd += ["--sortformer-dir", self.sortformer_dir]
+        try:
+            self.proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            # Wait for "ready" message on stderr (timeout 30s for slow CPU)
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                line = self.proc.stderr.readline()
+                if not line:
+                    self.error.emit(0, "diarize-only --stream stderr EOF before ready")
+                    return False
+                if "ready" in line:
+                    return True
+            self.error.emit(0, "diarize-only --stream startup timeout (30s)")
+            return False
+        except FileNotFoundError:
+            self.error.emit(0, "diarize-only binary not found. Sortformer feature built?")
+            return False
+
+    def diarize(self, chunk_id: int, chunk_path: str):
+        """Slot: process one chunk. Emits diarized(chunk_id, segments) when done."""
+        if not self.proc:
+            self.error.emit(chunk_id, "DiarizationWorker not started")
+            return
+        if self.proc.poll() is not None:
+            self.error.emit(chunk_id, f"diarize-only exited with code {self.proc.returncode}")
+            return
+        try:
+            self.proc.stdin.write(f"FILE: {chunk_path}\n")
+            self.proc.stdin.flush()
+            self._collect_response(chunk_id)
+        except BrokenPipeError:
+            self.error.emit(chunk_id, "diarize-only stdin pipe broken")
+
+    def _collect_response(self, chunk_id: int):
+        segments = []
+        while True:
+            line = self.proc.stdout.readline()
+            if not line:
+                self.error.emit(chunk_id, "diarize-only stdout EOF unexpected")
+                return
+            line = line.rstrip("\n")
+            if line == "":
+                # blank line = end of chunk
+                self.diarized.emit(chunk_id, segments)
+                return
+            if line.startswith("ERROR:"):
+                self.error.emit(chunk_id, line)
+                return
+            parts = line.split()
+            if len(parts) == 3:
+                try:
+                    segments.append({
+                        "start_s": float(parts[0]),
+                        "end_s": float(parts[1]),
+                        "speaker_id": int(parts[2]),
+                    })
+                except ValueError:
+                    self.error.emit(chunk_id, f"malformed segment line: {line}")
+                    return
+
+    def reset_session(self):
+        """Send RESET command to reset Sortformer streaming state."""
+        if not self.proc or self.proc.poll() is not None:
+            return
+        try:
+            self.proc.stdin.write("RESET\n")
+            self.proc.stdin.flush()
+            # Wait for RESET_OK
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                line = self.proc.stdout.readline()
+                if not line:
+                    return
+                if line.strip() == "RESET_OK":
+                    return
+        except BrokenPipeError:
+            pass
+
+    def stop(self):
+        if self.proc:
+            try:
+                if self.proc.stdin and not self.proc.stdin.closed:
+                    self.proc.stdin.close()
+                self.proc.wait(timeout=5)
+            except (subprocess.TimeoutExpired, BrokenPipeError):
+                self.proc.kill()
+                self.proc.wait()
+            self.proc = None
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
