@@ -612,6 +612,23 @@ class MeetingWindow(QMainWindow):
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
 
+        # Write meeting metadata
+        meta = {
+            "ended_at": datetime.now().isoformat(),
+            "duration_s": self.elapsed_seconds,
+            "speakers_count": len(self.speakers_seen),
+            "speakers_ids": sorted(self.speakers_seen),
+            "llm_profile": self.profile_combo.currentText(),
+            "chunks_count": self.chunker.chunk_id if self.chunker else 0,
+        }
+        try:
+            (self.meeting_dir / "meeting.meta.json").write_text(
+                json.dumps(meta, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except (OSError, AttributeError):
+            pass
+
         # LLM summary stub — implemented in Task 11
         self._run_llm_summary()
 
