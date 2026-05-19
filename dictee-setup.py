@@ -384,9 +384,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 cheatsheet_mod="", cheatsheet_key_seq="",
                 parakeet_quant=None,
                 force_cpu=None,
-                meeting_profile="synthese",
                 meeting_dir="",
-                meeting_chunk_s=40,
                 mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
@@ -538,11 +536,8 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
     if cheatsheet_key_seq:
         values["DICTEE_CHEATSHEET_KEY_SEQ"] = _s(cheatsheet_key_seq)
     # Live meeting settings
-    if meeting_profile in ("synthese", "chapitrage", "correction-asr"):
-        values["DICTEE_MEETING_PROFILE"] = meeting_profile
     if meeting_dir:
         values["DICTEE_MEETING_DIR"] = _s(meeting_dir)
-    values["DICTEE_MEETING_CHUNK_S"] = str(int(meeting_chunk_s))
 
     # Keys that must be re-commented when absent from values.
     # Without this, a previously active key stays active forever.
@@ -5810,15 +5805,14 @@ class DicteeSetupDialog(QDialog):
         layout.setSpacing(10)
         layout.addWidget(QLabel("<h2>" + _("Live meeting") + "</h2>"))
 
-        layout.addWidget(QLabel(_("Default LLM profile at end of meeting:")))
-        self.cmb_meeting_profile = QComboBox()
-        self.cmb_meeting_profile.addItems(["synthese", "chapitrage", "correction-asr"])
-        _existing_profile = self.conf.get("DICTEE_MEETING_PROFILE", "synthese")
-        if _existing_profile in ["synthese", "chapitrage", "correction-asr"]:
-            self.cmb_meeting_profile.setCurrentText(_existing_profile)
-        layout.addWidget(self.cmb_meeting_profile)
-
         layout.addSpacing(8)
+        layout.addWidget(QLabel(
+            _("Live meeting captures audio continuously and hands it off to the "
+              "dictation window for transcription + diarization + LLM analysis "
+              "when you stop it.")
+        ))
+
+        layout.addSpacing(12)
         layout.addWidget(QLabel(_("Save folder:")))
         self.led_meeting_dir = QLineEdit(
             self.conf.get("DICTEE_MEETING_DIR",
@@ -5826,22 +5820,6 @@ class DicteeSetupDialog(QDialog):
                                        ".local", "share", "dictee", "meetings"))
         )
         layout.addWidget(self.led_meeting_dir)
-
-        layout.addSpacing(8)
-        layout.addWidget(QLabel(_("Chunk duration (seconds):")))
-        self.sld_meeting_chunk = QSlider(Qt.Orientation.Horizontal)
-        self.sld_meeting_chunk.setMinimum(20)
-        self.sld_meeting_chunk.setMaximum(60)
-        try:
-            self.sld_meeting_chunk.setValue(
-                int(self.conf.get("DICTEE_MEETING_CHUNK_S", "40")))
-        except ValueError:
-            self.sld_meeting_chunk.setValue(40)
-        self.lbl_meeting_chunk = QLabel(f"{self.sld_meeting_chunk.value()} s")
-        self.sld_meeting_chunk.valueChanged.connect(
-            lambda v: self.lbl_meeting_chunk.setText(f"{v} s"))
-        layout.addWidget(self.sld_meeting_chunk)
-        layout.addWidget(self.lbl_meeting_chunk)
 
         layout.addStretch()
         return page
@@ -18083,15 +18061,9 @@ class DicteeSetupDialog(QDialog):
                     force_cpu=(
                         self.tgl_force_cpu.isChecked()
                         if hasattr(self, 'tgl_force_cpu') else None),
-                    meeting_profile=(
-                        self.cmb_meeting_profile.currentText()
-                        if hasattr(self, 'cmb_meeting_profile') else "synthese"),
                     meeting_dir=(
                         self.led_meeting_dir.text()
                         if hasattr(self, 'led_meeting_dir') else ""),
-                    meeting_chunk_s=(
-                        self.sld_meeting_chunk.value()
-                        if hasattr(self, 'sld_meeting_chunk') else 40),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.

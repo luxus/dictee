@@ -1,29 +1,23 @@
 #!/usr/bin/env python3
-"""dictee-meeting-live — Live meeting transcription + diarization for dictee.
+"""dictee-meeting-live — Capture audio for a live meeting, then hand off to dictee-transcribe.
 
-Captures audio continuously, chunks every 40 s with 10 s overlap,
-sends chunks to Parakeet (via transcribe-daemon socket) and Sortformer
-(via diarize-only --stream), aligns results, displays in a Qt window,
-and runs LLM summary at the end.
+Captures audio with pw-record into audio.wav until the user clicks Stop, then
+launches `dictee-transcribe --file <audio.wav> --diarize` which handles
+transcription + diarization + LLM analysis + export.
 """
 
 import json
 import os
 import sys
-import time
-import signal
-import socket
 import argparse
 import subprocess
 from pathlib import Path
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, QFileSystemWatcher, Qt
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QComboBox, QScrollArea, QTextEdit,
-    QSystemTrayIcon, QMenu,
+    QLabel, QPushButton,
 )
 
 
@@ -36,8 +30,11 @@ def _singleton_path():
 
 
 def meeting_dir(timestamp=None):
+    base_dir = os.environ.get("DICTEE_MEETING_DIR",
+                              os.path.join(os.path.expanduser("~"),
+                                           ".local/share/dictee/meetings"))
     ts = timestamp or datetime.now().strftime("%Y-%m-%d-%H%M")
-    base = Path.home() / ".local/share/dictee/meetings" / ts
+    base = Path(base_dir) / ts
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -50,7 +47,6 @@ class AudioCaptureWorker(QThread):
     """Continuous audio capture via pw-record into a growing WAV file."""
 
     error = pyqtSignal(str)
-    started_ok = pyqtSignal()
 
     def __init__(self, output_wav: Path):
         super().__init__()
@@ -73,7 +69,6 @@ class AudioCaptureWorker(QThread):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
-            self.started_ok.emit()
             rc = self.proc.wait()
             if rc != 0 and not self._stop:
                 err = self.proc.stderr.read().decode("utf-8", "replace")
@@ -91,435 +86,31 @@ class AudioCaptureWorker(QThread):
                 self.proc.kill()
 
 
-class ChunkerWorker(QThread):
-    """Splits the growing audio.wav into 40 s chunks with 10 s overlap via ffmpeg.
-
-    Emits `chunk_ready(int chunk_id, str path)` once each chunk is extracted.
-    Strategy: poll every 1 s; once duration >= start_t + 40 s, extract
-    [start_t, start_t+40] into chunk_NNN.wav and advance start_t by 30 s.
-    """
-
-    chunk_ready = pyqtSignal(int, str)
-    error = pyqtSignal(str)
-
-    def __init__(self, audio_wav: Path, chunks_dir: Path,
-                 chunk_duration: int = 40, overlap: int = 10):
-        super().__init__()
-        self.audio_wav = audio_wav
-        self.chunks_dir = chunks_dir
-        self.chunk_duration = chunk_duration
-        self.overlap = overlap
-        self.advance = chunk_duration - overlap  # 30 s
-        self._stop = False
-        self.chunk_id = 0
-
-    def run(self):
-        self.chunks_dir.mkdir(parents=True, exist_ok=True)
-        start_t = 0
-        while not self._stop:
-            duration = self._wav_duration(self.audio_wav)
-            if duration >= start_t + self.chunk_duration:
-                chunk_path = self.chunks_dir / f"chunk_{self.chunk_id:04d}.wav"
-                rc = self._extract(start_t, self.chunk_duration, chunk_path)
-                if rc == 0:
-                    self.chunk_ready.emit(self.chunk_id, str(chunk_path))
-                    self.chunk_id += 1
-                    start_t += self.advance
-                else:
-                    self.error.emit(f"ffmpeg extract failed (chunk {self.chunk_id})")
-                    return
-            time.sleep(1)
-
-    def _wav_duration(self, path: Path) -> float:
-        # 44 byte header + raw PCM s16le mono 16 kHz = 32000 B/s
-        try:
-            size = path.stat().st_size
-            return max(0.0, (size - 44) / 32000.0)
-        except FileNotFoundError:
-            return 0.0
-
-    def _extract(self, start_s: int, dur_s: int, out_path: Path) -> int:
-        cmd = [
-            "ffmpeg", "-y",
-            "-ss", str(start_s),
-            "-t", str(dur_s),
-            "-i", str(self.audio_wav),
-            "-ar", "16000", "-ac", "1",
-            "-c:a", "pcm_s16le",
-            str(out_path),
-        ]
-        proc = subprocess.run(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        return proc.returncode
-
-    def stop(self):
-        self._stop = True
-
-
-class TranscriptionWorker(QObject):
-    """Pour chaque chunk prêt, appelle transcribe-client et émet (chunk_id, tokens).
-
-    tokens = [{"text": str, "start_s": float, "end_s": float}, ...]
-    Utilise le transcribe-daemon existant (Parakeet INT8/FP32 déjà en RAM
-    via le service systemd utilisateur).
-    """
-
-    transcribed = pyqtSignal(int, list)
-    error = pyqtSignal(int, str)
-
-    # Socket path mirrors transcribe-client SOCKET_PATH logic:
-    # prefer $XDG_RUNTIME_DIR/transcribe.sock, fallback /tmp/transcribe.sock-<uid>
-    def __init__(self):
-        super().__init__()
-        xdg = os.environ.get("XDG_RUNTIME_DIR")
-        if xdg:
-            self.daemon_socket = os.path.join(xdg, "transcribe.sock")
-        else:
-            self.daemon_socket = f"/tmp/transcribe.sock-{os.getuid()}"
-
-    def transcribe(self, chunk_id: int, chunk_path: str):
-        """Slot connecté à ChunkerWorker.chunk_ready."""
-        if not os.path.exists(self.daemon_socket):
-            self.error.emit(
-                chunk_id,
-                f"socket transcribe-daemon absente ({self.daemon_socket})",
-            )
-            return
-        try:
-            proc = subprocess.run(
-                ["transcribe-client", chunk_path, "--json-timestamps"],
-                capture_output=True,
-                text=True,
-                timeout=20,
-            )
-            if proc.returncode != 0:
-                self.error.emit(
-                    chunk_id,
-                    f"transcribe-client exit {proc.returncode}: {proc.stderr.strip()}",
-                )
-                return
-            data = json.loads(proc.stdout)
-            tokens = data.get("tokens", [])
-            self.transcribed.emit(chunk_id, tokens)
-        except subprocess.TimeoutExpired:
-            self.error.emit(chunk_id, "transcribe-client timeout (>20 s)")
-        except json.JSONDecodeError as e:
-            self.error.emit(chunk_id, f"JSON parse error: {e}")
-
-
-class DiarizationWorker(QObject):
-    """Keeps diarize-only --stream alive and sends chunks via stdin.
-
-    Emits (chunk_id, segments) where segments = [{"start_s", "end_s", "speaker_id"}, ...]
-    Sortformer state is preserved between chunks → stable speaker IDs.
-    """
-
-    diarized = pyqtSignal(int, list)
-    error = pyqtSignal(int, str)
-
-    def __init__(self, sortformer_dir: str = None):
-        super().__init__()
-        self.proc = None
-        self.sortformer_dir = sortformer_dir
-
-    def start(self) -> bool:
-        """Launch the subprocess. Returns True if ready, False on failure."""
-        cmd = ["diarize-only", "--stream"]
-        if self.sortformer_dir:
-            cmd += ["--sortformer-dir", self.sortformer_dir]
-        try:
-            self.proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-            )
-            # Wait for "ready" message on stderr (timeout 30s for slow CPU)
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline:
-                line = self.proc.stderr.readline()
-                if not line:
-                    self.error.emit(0, "diarize-only --stream stderr EOF before ready")
-                    return False
-                if "ready" in line:
-                    return True
-            self.error.emit(0, "diarize-only --stream startup timeout (30s)")
-            return False
-        except FileNotFoundError:
-            self.error.emit(0, "diarize-only binary not found. Sortformer feature built?")
-            return False
-
-    def diarize(self, chunk_id: int, chunk_path: str):
-        """Slot: process one chunk. Emits diarized(chunk_id, segments) when done."""
-        if not self.proc:
-            self.error.emit(chunk_id, "DiarizationWorker not started")
-            return
-        if self.proc.poll() is not None:
-            self.error.emit(chunk_id, f"diarize-only exited with code {self.proc.returncode}")
-            return
-        try:
-            self.proc.stdin.write(f"FILE: {chunk_path}\n")
-            self.proc.stdin.flush()
-            self._collect_response(chunk_id)
-        except BrokenPipeError:
-            self.error.emit(chunk_id, "diarize-only stdin pipe broken")
-
-    def _collect_response(self, chunk_id: int):
-        segments = []
-        while True:
-            line = self.proc.stdout.readline()
-            if not line:
-                self.error.emit(chunk_id, "diarize-only stdout EOF unexpected")
-                return
-            line = line.rstrip("\n")
-            if line == "":
-                # blank line = end of chunk
-                self.diarized.emit(chunk_id, segments)
-                return
-            if line.startswith("ERROR:"):
-                self.error.emit(chunk_id, line)
-                return
-            parts = line.split()
-            if len(parts) == 3:
-                try:
-                    segments.append({
-                        "start_s": float(parts[0]),
-                        "end_s": float(parts[1]),
-                        "speaker_id": int(parts[2]),
-                    })
-                except ValueError:
-                    self.error.emit(chunk_id, f"malformed segment line: {line}")
-                    return
-
-    def reset_session(self):
-        """Send RESET command to reset Sortformer streaming state."""
-        if not self.proc or self.proc.poll() is not None:
-            return
-        try:
-            self.proc.stdin.write("RESET\n")
-            self.proc.stdin.flush()
-            # Wait for RESET_OK
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline:
-                line = self.proc.stdout.readline()
-                if not line:
-                    return
-                if line.strip() == "RESET_OK":
-                    return
-        except BrokenPipeError:
-            pass
-
-    def stop(self):
-        if self.proc:
-            try:
-                if self.proc.stdin and not self.proc.stdin.closed:
-                    self.proc.stdin.close()
-                self.proc.wait(timeout=5)
-            except (subprocess.TimeoutExpired, BrokenPipeError):
-                self.proc.kill()
-                self.proc.wait()
-            self.proc = None
-
-
-class AlignerWorker(QObject):
-    """Aligns Parakeet tokens with Sortformer segments by timestamp overlap.
-
-    For each token, picks the speaker with maximum overlap on [token.start_s, token.end_s].
-    Consecutive tokens with the same speaker are grouped into one line.
-    Local chunk timestamps are offset to absolute meeting timestamps via chunk_offset_s.
-
-    Logic ported from src/bin/transcribe_diarize_batch.rs:316-343.
-
-    Emits aligned(chunk_id, lines) where:
-      lines = [{"speaker": int, "text": str, "start_s": float, "end_s": float}, ...]
-    """
-
-    aligned = pyqtSignal(int, list)
-
-    def __init__(self, chunk_offset_s: dict = None):
-        super().__init__()
-        # chunk_id → absolute offset in seconds (set by orchestrator before each chunk)
-        self.chunk_offset = chunk_offset_s or {}
-        # Pending results: both tokens and segments must arrive before alignment
-        self._transcription = {}  # chunk_id → tokens
-        self._diarization = {}    # chunk_id → segments
-
-    def on_transcribed(self, chunk_id: int, tokens: list):
-        """Slot for TranscriptionWorker.transcribed signal."""
-        self._transcription[chunk_id] = tokens
-        self._try_align(chunk_id)
-
-    def on_diarized(self, chunk_id: int, segments: list):
-        """Slot for DiarizationWorker.diarized signal."""
-        self._diarization[chunk_id] = segments
-        self._try_align(chunk_id)
-
-    def _try_align(self, chunk_id: int):
-        if chunk_id not in self._transcription or chunk_id not in self._diarization:
-            return
-        tokens = self._transcription.pop(chunk_id)
-        segments = self._diarization.pop(chunk_id)
-        offset = self.chunk_offset.get(chunk_id, 0.0)
-
-        lines = []
-        current_speaker = None
-        current_text = []
-        current_start = None
-        current_end = None
-
-        for tok in tokens:
-            spk = self._find_speaker(tok["start_s"], tok["end_s"], segments)
-            if spk != current_speaker:
-                if current_speaker is not None:
-                    lines.append({
-                        "speaker": current_speaker,
-                        "text": " ".join(current_text).strip(),
-                        "start_s": current_start + offset,
-                        "end_s": current_end + offset,
-                    })
-                current_speaker = spk
-                current_text = [tok["text"]]
-                current_start = tok["start_s"]
-            else:
-                current_text.append(tok["text"])
-            current_end = tok["end_s"]
-
-        if current_speaker is not None:
-            lines.append({
-                "speaker": current_speaker,
-                "text": " ".join(current_text).strip(),
-                "start_s": current_start + offset,
-                "end_s": current_end + offset,
-            })
-
-        self.aligned.emit(chunk_id, lines)
-
-    @staticmethod
-    def _find_speaker(tok_start: float, tok_end: float, segments: list) -> int:
-        """Return the speaker_id with maximum overlap with [tok_start, tok_end].
-
-        Returns -1 if no segment overlaps (silence or out-of-range token).
-        """
-        best_spk = -1
-        best_overlap = 0.0
-        for seg in segments:
-            overlap = max(0.0, min(tok_end, seg["end_s"]) - max(tok_start, seg["start_s"]))
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_spk = seg["speaker_id"]
-        return best_spk
-
-
-# ---------------------------------------------------------------------------
-# LLM summary worker
-# ---------------------------------------------------------------------------
-
-class FinalizerWorker(QThread):
-    """Runs dictee-diarize-llm with the chosen profile on transcript-live.md.
-
-    Output goes to summary.md in the meeting folder.
-    Uses dictee-diarize-llm (not dictee-postprocess) because the profiles
-    synthese/chapitrage/correction-asr are defined there.
-    Input is the full transcript file via stdin (--input -).
-    """
-
-    done = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-    def __init__(self, transcript_path: Path, summary_path: Path, profile: str):
-        super().__init__()
-        self.transcript_path = transcript_path
-        self.summary_path = summary_path
-        self.profile = profile
-
-    def run(self):
-        try:
-            content = self.transcript_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            self.error.emit(f"Transcript introuvable : {self.transcript_path}")
-            return
-
-        lang_code = ""
-        try:
-            conf_path = Path.home() / ".config/dictee.conf"
-            if conf_path.exists():
-                for line in conf_path.read_text().splitlines():
-                    if line.startswith("DICTEE_LANG_SOURCE="):
-                        lang_code = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        break
-        except OSError:
-            pass
-
-        cmd = ["dictee-diarize-llm", "--profile", self.profile, "--input", "-"]
-        if lang_code:
-            cmd += ["--lang", lang_code]
-        try:
-            proc = subprocess.run(
-                cmd,
-                input=content,
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            if proc.returncode != 0:
-                self.error.emit(
-                    f"dictee-diarize-llm exit {proc.returncode}: {proc.stderr.strip()}"
-                )
-                return
-            self.summary_path.write_text(proc.stdout, encoding="utf-8")
-            self.done.emit(str(self.summary_path))
-        except subprocess.TimeoutExpired:
-            self.error.emit("LLM timeout (>5 min)")
-        except FileNotFoundError:
-            self.error.emit("dictee-diarize-llm introuvable")
-        except Exception as e:
-            self.error.emit(f"FinalizerWorker : {e}")
-
-
 # ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
 class MeetingWindow(QMainWindow):
-    """Main meeting-live window."""
+    """Minimal meeting capture window.
 
-    SPEAKER_COLORS = [
-        "#1976D2",  # blue
-        "#388E3C",  # green
-        "#F57C00",  # orange
-        "#C62828",  # red
-    ]
+    Captures audio with pw-record until the user clicks Stop, then launches
+    `dictee-transcribe --file <audio.wav> --diarize` to open the familiar
+    transcription window for diarization + LLM analysis + export.
+    """
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Réunion live")
-        self.resize(800, 600)
+        self.setWindowTitle("Réunion live — capture")
+        self.resize(420, 180)
 
         self.audio_worker = None
-        self.chunker = None
-        self.transcriber = None
-        self.diarizer = None
-        self.aligner = None
-
         self.meeting_dir = None
-        self.transcript_path = None
+        self.audio_wav = None
         self.elapsed_seconds = 0
-        self.speakers_seen = set()
 
-        # Tick timer for status bar
-        from PyQt6.QtCore import QTimer
         self._tick_timer = QTimer(self)
         self._tick_timer.timeout.connect(self._tick)
         self._tick_timer.setInterval(1000)
-
-        # Background executor for blocking subprocess calls (transcribe + diarize)
-        import concurrent.futures
-        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
         self._build_ui()
 
@@ -528,43 +119,29 @@ class MeetingWindow(QMainWindow):
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
 
-        self.status_label = QLabel("Prêt à démarrer")
+        self.status_label = QLabel("Prêt à enregistrer")
+        self.status_label.setStyleSheet("font-size: 14pt; padding: 12px;")
         layout.addWidget(self.status_label)
 
-        self.transcript_view = QTextEdit()
-        self.transcript_view.setReadOnly(True)
-        self.transcript_view.setStyleSheet("font-family: monospace; font-size: 11pt;")
-        layout.addWidget(self.transcript_view, stretch=1)
+        self.duration_label = QLabel("00:00")
+        self.duration_label.setStyleSheet("font-size: 24pt; font-family: monospace; padding: 8px;")
+        layout.addWidget(self.duration_label)
 
         btn_row = QHBoxLayout()
         self.btn_start = QPushButton("▶ Démarrer")
         self.btn_start.clicked.connect(self.start_meeting)
         btn_row.addWidget(self.btn_start)
 
-        self.btn_stop = QPushButton("⏹ Arrêter")
+        self.btn_stop = QPushButton("⏹ Arrêter et analyser")
         self.btn_stop.clicked.connect(self.stop_meeting)
         self.btn_stop.setEnabled(False)
         btn_row.addWidget(self.btn_stop)
-
-        btn_row.addStretch()
-
-        btn_row.addWidget(QLabel("Profil :"))
-        self.profile_combo = QComboBox()
-        self.profile_combo.addItems(["synthese", "chapitrage", "correction-asr"])
-        btn_row.addWidget(self.profile_combo)
 
         layout.addLayout(btn_row)
 
     def start_meeting(self):
         self.meeting_dir = meeting_dir()
-        audio_wav = self.meeting_dir / "audio.wav"
-        chunks_dir = self.meeting_dir / "chunks"
-        self.transcript_path = self.meeting_dir / "transcript-live.md"
-
-        self.transcript_path.write_text(
-            f"# Réunion {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n",
-            encoding="utf-8",
-        )
+        self.audio_wav = self.meeting_dir / "audio.wav"
 
         # PTT mutex
         try:
@@ -573,145 +150,37 @@ class MeetingWindow(QMainWindow):
             pass
 
         self.elapsed_seconds = 0
-        self.speakers_seen = set()
 
-        # Workers
-        self.audio_worker = AudioCaptureWorker(audio_wav)
+        self.audio_worker = AudioCaptureWorker(self.audio_wav)
         self.audio_worker.error.connect(self._on_error_msg)
         self.audio_worker.start()
 
-        # Read user-configured chunk duration (default 40 s, range 20-60)
-        chunk_duration = 40
-        try:
-            conf_path = Path.home() / ".config/dictee.conf"
-            if conf_path.exists():
-                for line in conf_path.read_text().splitlines():
-                    if line.startswith("DICTEE_MEETING_CHUNK_S="):
-                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        chunk_duration = max(20, min(60, int(val)))
-                        break
-        except (OSError, ValueError):
-            pass
-
-        self.chunk_duration = chunk_duration
-        self.chunker = ChunkerWorker(audio_wav, chunks_dir,
-                                     chunk_duration=chunk_duration, overlap=10)
-        self.chunker.chunk_ready.connect(self._on_chunk_ready)
-        self.chunker.error.connect(self._on_error_msg)
-        self.chunker.start()
-
-        self.transcriber = TranscriptionWorker()
-        self.diarizer = DiarizationWorker()
-        if not self.diarizer.start():
-            self._on_error_msg("Failed to start diarize-only --stream")
-            self._reset_state()
-            return
-
-        self.aligner = AlignerWorker()
-        self.aligner.chunk_offset = {}
-
-        # Wire signals from background tasks back to aligner.
-        # TranscriptionWorker.transcribed and DiarizationWorker.diarized are emitted
-        # from ThreadPoolExecutor threads. Qt AutoConnection detects the cross-thread
-        # boundary and uses QueuedConnection automatically, so aligner slots run
-        # safely in the main thread without explicit Qt.ConnectionType specification.
-        self.transcriber.transcribed.connect(self.aligner.on_transcribed)
-        self.diarizer.diarized.connect(self.aligner.on_diarized)
-        self.aligner.aligned.connect(self._on_aligned)
-        self.transcriber.error.connect(self._on_chunk_error)
-        self.diarizer.error.connect(self._on_chunk_error)
-
-        # File watcher for transcript
-        self.watcher = QFileSystemWatcher([str(self.transcript_path)])
-        self.watcher.fileChanged.connect(self._reload_transcript)
-
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
-        self.status_label.setText("● REC — 00:00")
+        self.status_label.setText("● Enregistrement en cours")
         self._tick_timer.start()
-
-    def _on_chunk_ready(self, chunk_id: int, chunk_path: str):
-        # Compute absolute offset for aligner
-        # chunk N starts at N * (chunk_duration - overlap)
-        self.aligner.chunk_offset[chunk_id] = chunk_id * (self.chunk_duration - 10)
-        # Submit transcribe + diarize to background threads
-        self._executor.submit(self.transcriber.transcribe, chunk_id, chunk_path)
-        self._executor.submit(self.diarizer.diarize, chunk_id, chunk_path)
-
-    def _on_aligned(self, chunk_id: int, lines: list):
-        with open(self.transcript_path, "a", encoding="utf-8") as f:
-            for ln in lines:
-                spk = ln["speaker"]
-                if spk == -1:
-                    continue
-                self.speakers_seen.add(spk)
-                f.write(f"[{ln['start_s']:.3f}s - {ln['end_s']:.3f}s] Speaker {spk}: {ln['text']}\n")
-
-    def _reload_transcript(self):
-        import re
-        spk_pattern = re.compile(r"^\[(\d+\.?\d*)s\s*-\s*(\d+\.?\d*)s\]\s*Speaker\s+(\d+):\s*(.*)$")
-        try:
-            content = self.transcript_path.read_text(encoding="utf-8")
-            html_lines = []
-            for line in content.split("\n"):
-                m = spk_pattern.match(line)
-                if m:
-                    start_s, _end_s, spk_id, text = m.groups()
-                    spk_id = int(spk_id)
-                    color = self.SPEAKER_COLORS[spk_id % len(self.SPEAKER_COLORS)]
-                    t = self._fmt_time(float(start_s))
-                    html_lines.append(
-                        f'<p style="color:{color}"><b>[Speaker {spk_id}]</b> '
-                        f'<span style="color:#888">({t})</span> {text}</p>'
-                    )
-                else:
-                    html_lines.append(f"<p>{line}</p>")
-            self.transcript_view.setHtml("\n".join(html_lines))
-            sb = self.transcript_view.verticalScrollBar()
-            sb.setValue(sb.maximum())
-        except FileNotFoundError:
-            pass
-
-    def _tick(self):
-        self.elapsed_seconds += 1
-        m, s = divmod(self.elapsed_seconds, 60)
-        h, m = divmod(m, 60)
-        self.status_label.setText(f"● REC — {h:02d}:{m:02d}:{s:02d}")
 
     def stop_meeting(self):
         self._tick_timer.stop()
-
-        # 1) Stop audio capture FIRST to freeze the WAV
         if self.audio_worker:
             self.audio_worker.stop()
+            self.audio_worker = None
 
-        # 2) Process remaining audio as a final partial chunk
-        self._submit_final_chunk_if_any()
-
-        # 3) Then stop chunker + diarizer
-        if self.chunker:
-            self.chunker.stop()
-        if self.diarizer:
-            self.diarizer.stop()
-
-        # 4) Reset state
+        # Reset PTT mutex
         try:
             Path("/dev/shm/.dictee_state").write_text("idle\n")
         except OSError:
             pass
 
-        self.status_label.setText(f"Terminée — {len(self.speakers_seen)} locuteurs")
-        self.btn_start.setEnabled(True)
-        self.btn_stop.setEnabled(False)
-
         # Write meeting metadata
+        try:
+            audio_size = self.audio_wav.stat().st_size if self.audio_wav else 0
+        except FileNotFoundError:
+            audio_size = 0
         meta = {
             "ended_at": datetime.now().isoformat(),
             "duration_s": self.elapsed_seconds,
-            "speakers_count": len(self.speakers_seen),
-            "speakers_ids": sorted(self.speakers_seen),
-            "llm_profile": self.profile_combo.currentText(),
-            "chunks_count": self.chunker.chunk_id if self.chunker else 0,
+            "audio_bytes": audio_size,
         }
         try:
             (self.meeting_dir / "meeting.meta.json").write_text(
@@ -721,141 +190,54 @@ class MeetingWindow(QMainWindow):
         except (OSError, AttributeError):
             pass
 
-        # LLM summary stub — implemented in Task 11
-        self._run_llm_summary()
-
-    def _submit_final_chunk_if_any(self):
-        """Extract any audio beyond the last full chunk as a final partial chunk.
-
-        If the user stops at e.g. 35s (no full chunk yet) or at 75s (1 full chunk
-        [0,40] already processed), the trailing audio is otherwise lost.
-        This grabs at least 5s of remaining audio and submits it as one more chunk
-        for transcription+diarization, then blocks (pumping Qt events) up to 30s
-        for the result to land before the LLM summary reads the transcript.
-        """
-        if not self.chunker or not self.meeting_dir:
-            return
-
-        audio_wav = self.meeting_dir / "audio.wav"
-        chunks_dir = self.meeting_dir / "chunks"
-
-        # Wait briefly for pw-record to finalize the WAV header
-        time.sleep(0.5)
-
-        try:
-            size = audio_wav.stat().st_size
-            total_duration = max(0.0, (size - 44) / 32000.0)
-        except FileNotFoundError:
-            return
-
-        advance = self.chunk_duration - 10  # 10 s overlap
-        last_chunk_start = (self.chunker.chunk_id - 1) * advance if self.chunker.chunk_id > 0 else -advance
-        next_start = last_chunk_start + advance
-        remaining = total_duration - next_start
-
-        # Only submit if we have at least 5 seconds of unprocessed audio
-        if remaining < 5.0:
-            return
-
-        chunk_id = self.chunker.chunk_id
-        chunk_path = chunks_dir / f"chunk_{chunk_id:04d}_final.wav"
-        chunks_dir.mkdir(parents=True, exist_ok=True)
-
-        # ffmpeg extract [next_start, total_duration]
-        proc = subprocess.run(
-            ["ffmpeg", "-y",
-             "-ss", str(int(next_start)),
-             "-i", str(audio_wav),
-             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
-             str(chunk_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if proc.returncode != 0:
-            return
-
-        # Submit to workers (same path as ChunkerWorker.chunk_ready emission)
-        self.aligner.chunk_offset[chunk_id] = next_start
-        self._executor.submit(self.transcriber.transcribe, chunk_id, str(chunk_path))
-        self._executor.submit(self.diarizer.diarize, chunk_id, str(chunk_path))
-
-        # Block briefly, pumping Qt events, until the alignment writes to the
-        # transcript — so the LLM summary sees the final lines.
-        # (UI remains responsive because processEvents() is called each iteration.)
-        import re
-        from PyQt6.QtCore import QCoreApplication
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            QCoreApplication.processEvents()
-            time.sleep(0.1)
-            try:
-                content = self.transcript_path.read_text(encoding="utf-8")
-                timestamps = re.findall(r"^\[(\d+\.?\d*)s\s*-", content, re.MULTILINE)
-                if timestamps and any(float(t) >= next_start - 5 for t in timestamps):
-                    return
-            except FileNotFoundError:
-                pass
-
-    def _run_llm_summary(self):
-        if not self.meeting_dir or not self.transcript_path:
-            return
-        # Check we have at least one diarized line before invoking LLM
-        try:
-            content = self.transcript_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            self.status_label.setText("Pas de transcript à synthétiser.")
-            return
-        import re
-        if not re.search(r"^\[\d+\.?\d*s\s*-", content, re.MULTILINE):
-            self.status_label.setText(
-                f"Réunion trop courte ({self.elapsed_seconds}s) — pas de synthèse"
-            )
-            return
-        self.status_label.setText("Synthèse LLM en cours…")
-        summary_path = self.meeting_dir / "summary.md"
-        self.finalizer = FinalizerWorker(
-            self.transcript_path,
-            summary_path,
-            self.profile_combo.currentText(),
-        )
-        self.finalizer.done.connect(self._on_summary_done)
-        self.finalizer.error.connect(self._on_error_msg)
-        self.finalizer.start()
-
-    def _on_summary_done(self, path: str):
-        self.status_label.setText(f"Synthèse prête : {path}")
-        try:
-            subprocess.Popen(["xdg-open", path])
-        except FileNotFoundError:
-            pass
-
-    def _reset_state(self):
-        try:
-            Path("/dev/shm/.dictee_state").write_text("idle\n")
-        except OSError:
-            pass
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
+
+        # Sanity check on audio
+        if audio_size < 1024:
+            self.status_label.setText(f"Enregistrement trop court ({self.elapsed_seconds}s)")
+            return
+
+        self.status_label.setText("Ouverture de l'analyse...")
+
+        # Hand off to dictee-transcribe with --diarize
+        try:
+            subprocess.Popen(
+                ["dictee-transcribe", "--file", str(self.audio_wav), "--diarize"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            self.status_label.setText("Erreur : dictee-transcribe introuvable")
+            return
+
+        # Close this window — dictee-transcribe takes over
+        self.close()
+
+    def _tick(self):
+        self.elapsed_seconds += 1
+        m, s = divmod(self.elapsed_seconds, 60)
+        h, m = divmod(m, 60)
+        if h > 0:
+            self.duration_label.setText(f"{h:02d}:{m:02d}:{s:02d}")
+        else:
+            self.duration_label.setText(f"{m:02d}:{s:02d}")
 
     def _on_error_msg(self, msg: str):
         self.status_label.setText(f"Erreur : {msg}")
         print(f"[meeting-live] {msg}", file=sys.stderr)
 
-    def _on_chunk_error(self, chunk_id: int, msg: str):
-        print(f"[meeting-live] chunk {chunk_id}: {msg}", file=sys.stderr)
-
     def closeEvent(self, event):
         if self.btn_stop.isEnabled():
-            self.stop_meeting()
-        if self._executor:
-            self._executor.shutdown(wait=False)
+            # Capture still running — stop it cleanly
+            self._tick_timer.stop()
+            if self.audio_worker:
+                self.audio_worker.stop()
+            try:
+                Path("/dev/shm/.dictee_state").write_text("idle\n")
+            except OSError:
+                pass
         super().closeEvent(event)
-
-    @staticmethod
-    def _fmt_time(seconds: float) -> str:
-        m = int(seconds) // 60
-        s = int(seconds) % 60
-        return f"{m:02d}:{s:02d}"
 
 
 # ---------------------------------------------------------------------------
@@ -863,7 +245,7 @@ class MeetingWindow(QMainWindow):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Live meeting transcription for dictee")
+    parser = argparse.ArgumentParser(description="Live meeting capture for dictee")
     parser.add_argument("--start", action="store_true", help="Start capture immediately")
     parser.add_argument("--stop", action="store_true", help="Stop running meeting")
     args = parser.parse_args()
