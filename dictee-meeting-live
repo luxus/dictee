@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""dictee-meeting-live — Live meeting transcription + diarization for dictee.
+
+Captures audio continuously, chunks every 40 s with 10 s overlap,
+sends chunks to Parakeet (via transcribe-daemon socket) and Sortformer
+(via diarize-only --stream), aligns results, displays in a Qt window,
+and runs LLM summary at the end.
+"""
+
+import os
+import sys
+import time
+import signal
+import socket
+import argparse
+import subprocess
+from pathlib import Path
+from datetime import datetime
+
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, QFileSystemWatcher, Qt
+from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QComboBox, QScrollArea, QTextEdit,
+    QSystemTrayIcon, QMenu,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _singleton_path():
+    return f"/tmp/dictee-meeting-live-{os.getuid()}.sock"
+
+
+def meeting_dir(timestamp=None):
+    ts = timestamp or datetime.now().strftime("%Y-%m-%d-%H%M")
+    base = Path.home() / ".local/share/dictee/meetings" / ts
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Workers
+# ---------------------------------------------------------------------------
+
+class AudioCaptureWorker(QThread):
+    """Continuous audio capture via pw-record into a growing WAV file."""
+
+    error = pyqtSignal(str)
+    started_ok = pyqtSignal()
+
+    def __init__(self, output_wav: Path):
+        super().__init__()
+        self.output_wav = output_wav
+        self.proc = None
+        self._stop = False
+
+    def run(self):
+        cmd = [
+            "pw-record",
+            "--format=s16",
+            "--rate=16000",
+            "--channels=1",
+            "--target=@DEFAULT_AUDIO_SOURCE@",
+            str(self.output_wav),
+        ]
+        try:
+            self.proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            self.started_ok.emit()
+            rc = self.proc.wait()
+            if rc != 0 and not self._stop:
+                err = self.proc.stderr.read().decode("utf-8", "replace")
+                self.error.emit(f"pw-record exit {rc}: {err}")
+        except FileNotFoundError:
+            self.error.emit("pw-record not found. Is PipeWire installed?")
+
+    def stop(self):
+        self._stop = True
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
+class ChunkerWorker(QThread):
+    """Splits the growing audio.wav into 40 s chunks with 10 s overlap via ffmpeg.
+
+    Emits `chunk_ready(int chunk_id, str path)` once each chunk is extracted.
+    Strategy: poll every 1 s; once duration >= start_t + 40 s, extract
+    [start_t, start_t+40] into chunk_NNN.wav and advance start_t by 30 s.
+    """
+
+    chunk_ready = pyqtSignal(int, str)
+    error = pyqtSignal(str)
+
+    def __init__(self, audio_wav: Path, chunks_dir: Path,
+                 chunk_duration: int = 40, overlap: int = 10):
+        super().__init__()
+        self.audio_wav = audio_wav
+        self.chunks_dir = chunks_dir
+        self.chunk_duration = chunk_duration
+        self.overlap = overlap
+        self.advance = chunk_duration - overlap  # 30 s
+        self._stop = False
+        self.chunk_id = 0
+
+    def run(self):
+        self.chunks_dir.mkdir(parents=True, exist_ok=True)
+        start_t = 0
+        while not self._stop:
+            duration = self._wav_duration(self.audio_wav)
+            if duration >= start_t + self.chunk_duration:
+                chunk_path = self.chunks_dir / f"chunk_{self.chunk_id:04d}.wav"
+                rc = self._extract(start_t, self.chunk_duration, chunk_path)
+                if rc == 0:
+                    self.chunk_ready.emit(self.chunk_id, str(chunk_path))
+                    self.chunk_id += 1
+                    start_t += self.advance
+                else:
+                    self.error.emit(f"ffmpeg extract failed (chunk {self.chunk_id})")
+                    return
+            time.sleep(1)
+
+    def _wav_duration(self, path: Path) -> float:
+        # 44 byte header + raw PCM s16le mono 16 kHz = 32000 B/s
+        try:
+            size = path.stat().st_size
+            return max(0.0, (size - 44) / 32000.0)
+        except FileNotFoundError:
+            return 0.0
+
+    def _extract(self, start_s: int, dur_s: int, out_path: Path) -> int:
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(start_s),
+            "-t", str(dur_s),
+            "-i", str(self.audio_wav),
+            "-ar", "16000", "-ac", "1",
+            "-c:a", "pcm_s16le",
+            str(out_path),
+        ]
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return proc.returncode
+
+    def stop(self):
+        self._stop = True
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(description="Live meeting transcription for dictee")
+    parser.add_argument("--start", action="store_true", help="Start capture immediately")
+    parser.add_argument("--stop", action="store_true", help="Stop running meeting")
+    args = parser.parse_args()
+
+    sock_path = _singleton_path()
+    if os.path.exists(sock_path):
+        # Real singleton dispatch added in Task 6
+        print("[meeting-live] already running", file=sys.stderr)
+        sys.exit(1)
+
+    app = QApplication(sys.argv)
+    # MeetingWindow added in Task 6
+    print("[meeting-live] skeleton OK")
+
+
+if __name__ == "__main__":
+    main()
