@@ -636,6 +636,10 @@ class DicteeTrayAppIndicator:
         item_transcribe.connect("activate", lambda _: subprocess.Popen(["dictee-transcribe"]))
         self.menu.append(item_transcribe)
 
+        item_meeting_live = Gtk.MenuItem(label=_("Start live meeting transcription"))
+        item_meeting_live.connect("activate", lambda _: subprocess.Popen(["dictee-meeting-live", "--start"]))
+        self.menu.append(item_meeting_live)
+
         self.item_diarize_gtk = Gtk.CheckMenuItem(label=_("Meeting"))
         sortformer_ok = _sortformer_available()
         self.item_diarize_gtk.set_sensitive(sortformer_ok)
@@ -1097,6 +1101,7 @@ class DicteeTrayQt:
         self.menu.addSeparator()
 
         self.action_transcribe = self.menu.addAction(_("Transcribe a file..."))
+        self.action_meeting_live = self.menu.addAction(_("Start live meeting transcription"))
 
         self.action_diarize_qt = self.menu.addAction(_("Meeting"))
         self.action_diarize_qt.setCheckable(True)
@@ -1205,6 +1210,8 @@ class DicteeTrayQt:
                 self.QTimer.singleShot(1000, self._delayed_refresh)
         elif action == self.action_transcribe:
             subprocess.Popen(["dictee-transcribe"])
+        elif action == self.action_meeting_live:
+            subprocess.Popen(["dictee-meeting-live", "--start"])
         elif action == self.action_cheatsheet:
             subprocess.Popen(["dictee-cheatsheet", "--toggle"])
         elif action == self.action_setup:
