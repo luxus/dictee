@@ -361,7 +361,7 @@ fn parse_timestamps_to_json(raw: &str) -> String {
                 let ts_part = &rest[..close];
                 let text = rest[close + 1..].trim();
                 // ts_part: "0.50s - 1.20s"
-                let parts: Vec<&str> = ts_part.splitn(3, " - ").collect();
+                let parts: Vec<&str> = ts_part.splitn(2, " - ").collect();
                 if parts.len() == 2 {
                     let start_s: f64 = parts[0].trim_end_matches('s').parse().unwrap_or(0.0);
                     let end_s: f64 = parts[1].trim_end_matches('s').parse().unwrap_or(0.0);

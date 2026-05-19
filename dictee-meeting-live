@@ -171,14 +171,14 @@ class TranscriptionWorker(QObject):
     error = pyqtSignal(int, str)
 
     # Socket path mirrors transcribe-client SOCKET_PATH logic:
-    # prefer $XDG_RUNTIME_DIR/transcribe.sock, fallback /tmp/transcribe-<uid>.sock
+    # prefer $XDG_RUNTIME_DIR/transcribe.sock, fallback /tmp/transcribe.sock-<uid>
     def __init__(self):
         super().__init__()
         xdg = os.environ.get("XDG_RUNTIME_DIR")
         if xdg:
             self.daemon_socket = os.path.join(xdg, "transcribe.sock")
         else:
-            self.daemon_socket = f"/tmp/transcribe-{os.getuid()}.sock"
+            self.daemon_socket = f"/tmp/transcribe.sock-{os.getuid()}"
 
     def transcribe(self, chunk_id: int, chunk_path: str):
         """Slot connecté à ChunkerWorker.chunk_ready."""
