@@ -682,6 +682,36 @@ class MeetingWindow(QMainWindow):
         if checked:
             self.resize(self.width(), max(self.height(), 440))
 
+    def _extract_speaker_anchors(self, min_duration_s: float = 1.5, max_anchors_per_speaker: int = 5) -> dict:
+        """Parse transcript-live.md to extract temporal anchors per speaker_id.
+
+        Returns {speaker_id: [{"start": float, "end": float}, ...]}
+        Only keeps segments >= min_duration_s (filters short interjections).
+        Sorted by duration descending, capped at max_anchors_per_speaker.
+        """
+        anchors = {}
+        try:
+            content = self.transcript_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return anchors
+        line_re = re.compile(r"^\[(\d+\.?\d*)s\s*-\s*(\d+\.?\d*)s\]\s*Speaker\s+(\d+):")
+        for line in content.splitlines():
+            m = line_re.match(line)
+            if not m:
+                continue
+            start = float(m.group(1))
+            end = float(m.group(2))
+            spk_id = int(m.group(3))
+            duration = end - start
+            if duration < min_duration_s:
+                continue
+            anchors.setdefault(spk_id, []).append({"start": start, "end": end})
+        # Sort by duration desc, keep top N per speaker
+        for spk_id in list(anchors.keys()):
+            anchors[spk_id].sort(key=lambda a: a["end"] - a["start"], reverse=True)
+            anchors[spk_id] = anchors[spk_id][:max_anchors_per_speaker]
+        return anchors
+
     def stop_meeting(self):
         self._tick_timer.stop()
 
@@ -731,6 +761,26 @@ class MeetingWindow(QMainWindow):
             return
 
         self.status_label.setText("Ouverture de l'analyse...")
+
+        # Write speakers.json next to audio.wav so dictee-transcribe can
+        # pre-fill the rename panel with live-session speaker names.
+        if self._speaker_name_map and self.transcript_path and self.transcript_path.is_file():
+            try:
+                anchors = self._extract_speaker_anchors()
+                speakers_data = {
+                    "name_map": {str(k): v for k, v in self._speaker_name_map.items()},
+                    "anchors": {
+                        str(k): v for k, v in anchors.items()
+                        if k in self._speaker_name_map  # only named speakers
+                    },
+                }
+                speakers_json_path = self.meeting_dir / "speakers.json"
+                speakers_json_path.write_text(
+                    json.dumps(speakers_data, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception as e:
+                print(f"[meeting-live] failed to write speakers.json: {e}", file=sys.stderr)
 
         # Hand off to dictee-transcribe
         try:

@@ -2179,6 +2179,23 @@ class TranscribeWindow(QDialog):
             self._load_audio(file_path)
         if auto_diarize and _sortformer_available():
             self._chk_diarize.setChecked(True)
+
+        # Speaker transfer from meeting-live: look for speakers.json next to
+        # the audio file. Loaded now; applied after diarization completes.
+        self._pending_speakers_data = None
+        if file_path:
+            try:
+                _spk_json = os.path.join(
+                    os.path.dirname(os.path.abspath(file_path)),
+                    "speakers.json",
+                )
+                if os.path.isfile(_spk_json):
+                    with open(_spk_json, encoding="utf-8") as _f:
+                        self._pending_speakers_data = json.load(_f)
+                    _dbg(f"loaded speakers.json from {_spk_json}")
+            except Exception as _e:
+                _dbg(f"speakers.json load error: {_e!r}")
+
         if file_path and auto_diarize:
             # Defer to event loop so window is fully initialized
             QTimer.singleShot(100, self._on_transcribe)
@@ -3996,6 +4013,25 @@ class TranscribeWindow(QDialog):
         # target tab is visible (cf. _refresh_rename_panel_for_target docstring).
         self._refresh_rename_panel_for_target()
 
+        # Apply speaker names transferred from meeting-live (speakers.json).
+        # _populate_rename_fields has already built the QLineEdits above, so
+        # _prefill_rename_panel can fill them immediately.
+        if getattr(self, "_pending_speakers_data", None) and self._was_diarized and self._segments:
+            try:
+                name_map = self._pending_speakers_data.get("name_map", {})
+                anchors = self._pending_speakers_data.get("anchors", {})
+                matched = self._match_anchors_to_batch_speakers(
+                    name_map, anchors, self._segments)
+                if matched:
+                    self._speaker_name_map.update(matched)
+                    self._text_edit._speaker_name_map = dict(self._speaker_name_map)
+                    self._prefill_rename_panel(matched)
+                    _dbg(f"speakers.json applied: {matched}")
+            except Exception as _e:
+                _dbg(f"speakers.json apply error: {_e!r}")
+            finally:
+                self._pending_speakers_data = None  # consume once
+
         # NB: language auto-detection removed deliberately. The source
         # language combo reflects the user's choice (and DICTEE_LANG_SOURCE
         # in dictee.conf), which is also what drives the LLM Diarization
@@ -4756,6 +4792,60 @@ class TranscribeWindow(QDialog):
         # already gives enough feedback; the user expands the pane only
         # when they actually want to rename speakers.
         self._btn_rename_toggle.setChecked(False)
+
+    @staticmethod
+    def _match_anchors_to_batch_speakers(name_map, anchors, batch_segments):
+        """Match live-named speakers to batch speaker IDs via max overlap on anchors.
+
+        Args:
+            name_map: {"0": "Alice", "1": "Bob"} (str keys, live speaker integers as strings)
+            anchors: {"0": [{"start": float, "end": float}, ...], ...}
+            batch_segments: list of dicts {"speaker": "Speaker N", "start": float, "end": float, ...}
+                            (segments from _parse_diarize_output — speaker is a string label)
+
+        Returns: {"Speaker N": name} mapping ready for self._speaker_name_map.
+        """
+        from collections import defaultdict
+        # Accumulate overlap per (live_spk_str, batch_spk_str) pair
+        overlap_matrix = defaultdict(lambda: defaultdict(float))
+        for live_spk_str, live_anchors in anchors.items():
+            for anchor in live_anchors:
+                a_start, a_end = anchor["start"], anchor["end"]
+                for seg in batch_segments:
+                    b_start, b_end = seg["start"], seg["end"]
+                    overlap = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+                    if overlap > 0:
+                        overlap_matrix[live_spk_str][seg["speaker"]] += overlap
+
+        # Greedy assignment: most-confident named speaker first
+        used_batch_spks = set()
+        result = {}
+        live_spks_by_confidence = sorted(
+            name_map.keys(),
+            key=lambda s: max(overlap_matrix[s].values()) if overlap_matrix[s] else 0,
+            reverse=True,
+        )
+        for live_spk_str in live_spks_by_confidence:
+            candidates = [
+                (bs, ov) for bs, ov in overlap_matrix[live_spk_str].items()
+                if bs not in used_batch_spks
+            ]
+            if not candidates:
+                continue
+            best_batch_spk = max(candidates, key=lambda c: c[1])[0]
+            result[best_batch_spk] = name_map[live_spk_str]
+            used_batch_spks.add(best_batch_spk)
+        return result
+
+    def _prefill_rename_panel(self, name_map):
+        """Pre-fill rename panel QLineEdits with mapped names.
+
+        name_map: {"Speaker N": display_name} — keys match self._rename_line_edits.
+        Called after _populate_rename_fields so the widgets already exist.
+        """
+        for spk_label, name in name_map.items():
+            if spk_label in self._rename_line_edits:
+                self._rename_line_edits[spk_label].setText(name)
 
     def _apply_speaker_rename(self):
         """Collect QLineEdit values, update the display map, re-render.
