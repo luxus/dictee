@@ -567,7 +567,22 @@ class MeetingWindow(QMainWindow):
         self.audio_worker.error.connect(self._on_error_msg)
         self.audio_worker.start()
 
-        self.chunker = ChunkerWorker(audio_wav, chunks_dir)
+        # Read user-configured chunk duration (default 40 s, range 20-60)
+        chunk_duration = 40
+        try:
+            conf_path = Path.home() / ".config/dictee.conf"
+            if conf_path.exists():
+                for line in conf_path.read_text().splitlines():
+                    if line.startswith("DICTEE_MEETING_CHUNK_S="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        chunk_duration = max(20, min(60, int(val)))
+                        break
+        except (OSError, ValueError):
+            pass
+
+        self.chunk_duration = chunk_duration
+        self.chunker = ChunkerWorker(audio_wav, chunks_dir,
+                                     chunk_duration=chunk_duration, overlap=10)
         self.chunker.chunk_ready.connect(self._on_chunk_ready)
         self.chunker.error.connect(self._on_error_msg)
         self.chunker.start()
@@ -604,8 +619,8 @@ class MeetingWindow(QMainWindow):
 
     def _on_chunk_ready(self, chunk_id: int, chunk_path: str):
         # Compute absolute offset for aligner
-        # chunk N starts at N * (chunk_duration - overlap) = N * 30 s
-        self.aligner.chunk_offset[chunk_id] = chunk_id * 30.0
+        # chunk N starts at N * (chunk_duration - overlap)
+        self.aligner.chunk_offset[chunk_id] = chunk_id * (self.chunk_duration - 10)
         # Submit transcribe + diarize to background threads
         self._executor.submit(self.transcriber.transcribe, chunk_id, chunk_path)
         self._executor.submit(self.diarizer.diarize, chunk_id, chunk_path)
@@ -652,14 +667,21 @@ class MeetingWindow(QMainWindow):
 
     def stop_meeting(self):
         self._tick_timer.stop()
+
+        # 1) Stop audio capture FIRST to freeze the WAV
         if self.audio_worker:
             self.audio_worker.stop()
+
+        # 2) Process remaining audio as a final partial chunk
+        self._submit_final_chunk_if_any()
+
+        # 3) Then stop chunker + diarizer
         if self.chunker:
             self.chunker.stop()
         if self.diarizer:
             self.diarizer.stop()
 
-        # Reset state
+        # 4) Reset state
         try:
             Path("/dev/shm/.dictee_state").write_text("idle\n")
         except OSError:
@@ -688,6 +710,78 @@ class MeetingWindow(QMainWindow):
 
         # LLM summary stub — implemented in Task 11
         self._run_llm_summary()
+
+    def _submit_final_chunk_if_any(self):
+        """Extract any audio beyond the last full chunk as a final partial chunk.
+
+        If the user stops at e.g. 35s (no full chunk yet) or at 75s (1 full chunk
+        [0,40] already processed), the trailing audio is otherwise lost.
+        This grabs at least 5s of remaining audio and submits it as one more chunk
+        for transcription+diarization, then blocks (pumping Qt events) up to 30s
+        for the result to land before the LLM summary reads the transcript.
+        """
+        if not self.chunker or not self.meeting_dir:
+            return
+
+        audio_wav = self.meeting_dir / "audio.wav"
+        chunks_dir = self.meeting_dir / "chunks"
+
+        # Wait briefly for pw-record to finalize the WAV header
+        time.sleep(0.5)
+
+        try:
+            size = audio_wav.stat().st_size
+            total_duration = max(0.0, (size - 44) / 32000.0)
+        except FileNotFoundError:
+            return
+
+        advance = self.chunk_duration - 10  # 10 s overlap
+        last_chunk_start = (self.chunker.chunk_id - 1) * advance if self.chunker.chunk_id > 0 else -advance
+        next_start = last_chunk_start + advance
+        remaining = total_duration - next_start
+
+        # Only submit if we have at least 5 seconds of unprocessed audio
+        if remaining < 5.0:
+            return
+
+        chunk_id = self.chunker.chunk_id
+        chunk_path = chunks_dir / f"chunk_{chunk_id:04d}_final.wav"
+        chunks_dir.mkdir(parents=True, exist_ok=True)
+
+        # ffmpeg extract [next_start, total_duration]
+        proc = subprocess.run(
+            ["ffmpeg", "-y",
+             "-ss", str(int(next_start)),
+             "-i", str(audio_wav),
+             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+             str(chunk_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if proc.returncode != 0:
+            return
+
+        # Submit to workers (same path as ChunkerWorker.chunk_ready emission)
+        self.aligner.chunk_offset[chunk_id] = next_start
+        self._executor.submit(self.transcriber.transcribe, chunk_id, str(chunk_path))
+        self._executor.submit(self.diarizer.diarize, chunk_id, str(chunk_path))
+
+        # Block briefly, pumping Qt events, until the alignment writes to the
+        # transcript — so the LLM summary sees the final lines.
+        # (UI remains responsive because processEvents() is called each iteration.)
+        import re
+        from PyQt6.QtCore import QCoreApplication
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            QCoreApplication.processEvents()
+            time.sleep(0.1)
+            try:
+                content = self.transcript_path.read_text(encoding="utf-8")
+                timestamps = re.findall(r"^\[(\d+\.?\d*)s\s*-", content, re.MULTILINE)
+                if timestamps and any(float(t) >= next_start - 5 for t in timestamps):
+                    return
+            except FileNotFoundError:
+                pass
 
     def _run_llm_summary(self):
         if not self.meeting_dir or not self.transcript_path:
