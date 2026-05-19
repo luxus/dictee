@@ -444,7 +444,20 @@ class FinalizerWorker(QThread):
             self.error.emit(f"Transcript introuvable : {self.transcript_path}")
             return
 
+        lang_code = ""
+        try:
+            conf_path = Path.home() / ".config/dictee.conf"
+            if conf_path.exists():
+                for line in conf_path.read_text().splitlines():
+                    if line.startswith("DICTEE_LANG_SOURCE="):
+                        lang_code = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        break
+        except OSError:
+            pass
+
         cmd = ["dictee-diarize-llm", "--profile", self.profile, "--input", "-"]
+        if lang_code:
+            cmd += ["--lang", lang_code]
         try:
             proc = subprocess.run(
                 cmd,
