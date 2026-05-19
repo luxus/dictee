@@ -23,6 +23,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal, QFileSystemWatcher, QTime
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTextEdit, QToolButton, QFrame,
+    QFormLayout, QLineEdit, QGroupBox,
 )
 
 
@@ -439,6 +440,10 @@ class MeetingWindow(QMainWindow):
         self.elapsed_seconds = 0
         self.speakers_seen = set()
 
+        # Speaker naming (purely visual for live preview)
+        self._speaker_name_map = {}      # {speaker_id: user_provided_name}
+        self._speaker_row_widgets = {}   # {speaker_id: QLineEdit} for dynamic update
+
         self.chunker = None
         self.transcriber = None
         self.diarizer = None
@@ -497,6 +502,15 @@ class MeetingWindow(QMainWindow):
         self.transcript_view.setStyleSheet("font-family: monospace; font-size: 10pt;")
         self.transcript_view.setMinimumHeight(180)
         preview_layout.addWidget(self.transcript_view)
+
+        # Speakers naming panel (inside accordion, below transcript view)
+        speakers_group = QGroupBox("Speakers détectés")
+        speakers_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        self._speakers_form = QFormLayout(speakers_group)
+        self._speakers_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        # Empty by default — filled dynamically by _on_aligned
+        preview_layout.addWidget(speakers_group)
+
         layout.addWidget(self.preview_content)
 
         self.preview_content.setVisible(False)
@@ -521,6 +535,12 @@ class MeetingWindow(QMainWindow):
             pass
 
         self.elapsed_seconds = 0
+
+        # Reset speaker state for new meeting
+        self._speaker_name_map.clear()
+        for le in self._speaker_row_widgets.values():
+            self._speakers_form.removeRow(le)
+        self._speaker_row_widgets.clear()
         self.speakers_seen = set()
 
         # Audio capture
@@ -588,13 +608,40 @@ class MeetingWindow(QMainWindow):
                 spk = ln["speaker"]
                 if spk == -1:
                     continue
-                self.speakers_seen.add(spk)
                 f.write(f"[{ln['start_s']:.3f}s - {ln['end_s']:.3f}s] Speaker {spk}: {ln['text']}\n")
+
+                # NEW: if this is a brand-new speaker, add a naming row in the panel
+                if spk not in self.speakers_seen:
+                    self.speakers_seen.add(spk)
+                    self._add_speaker_row(spk)
+
+    def _add_speaker_row(self, spk_id: int):
+        """Add a QLineEdit row for naming a newly detected speaker."""
+        if spk_id in self._speaker_row_widgets:
+            return
+        label_text = f"Speaker {spk_id}"
+        line_edit = QLineEdit()
+        line_edit.setPlaceholderText("(nommer ce locuteur…)")
+        line_edit.editingFinished.connect(
+            lambda sid=spk_id, le=line_edit: self._on_speaker_renamed(sid, le.text().strip())
+        )
+        self._speakers_form.addRow(label_text, line_edit)
+        self._speaker_row_widgets[spk_id] = line_edit
+
+    def _on_speaker_renamed(self, spk_id: int, name: str):
+        if name:
+            self._speaker_name_map[spk_id] = name
+        else:
+            self._speaker_name_map.pop(spk_id, None)
+        # Trigger transcript view re-render to reflect the new name
+        self._reload_transcript()
 
     def _on_chunk_error(self, chunk_id: int, msg: str):
         print(f"[meeting-live] chunk {chunk_id}: {msg}", file=sys.stderr)
 
     def _reload_transcript(self):
+        if not self.transcript_path:
+            return
         spk_pattern = re.compile(
             r"^\[(\d+\.?\d*)s\s*-\s*(\d+\.?\d*)s\]\s*Speaker\s+(\d+):\s*(.*)$"
         )
@@ -608,8 +655,9 @@ class MeetingWindow(QMainWindow):
                     spk_id = int(spk_id)
                     color = self.SPEAKER_COLORS[spk_id % len(self.SPEAKER_COLORS)]
                     t = self._fmt_time(float(start_s))
+                    display_name = self._speaker_name_map.get(spk_id, f"Speaker {spk_id}")
                     html_lines.append(
-                        f'<p style="color:{color}"><b>[Speaker {spk_id}]</b> '
+                        f'<p style="color:{color}"><b>[{display_name}]</b> '
                         f'<span style="color:#888">({t})</span> {text}</p>'
                     )
                 else:
