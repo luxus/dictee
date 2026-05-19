@@ -19,10 +19,10 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, QFileSystemWatcher, QTimer
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, QFileSystemWatcher, QTimer, Qt
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTextEdit, QGroupBox,
+    QLabel, QPushButton, QTextEdit, QToolButton, QFrame,
 )
 
 
@@ -448,21 +448,32 @@ class MeetingWindow(QMainWindow):
 
         layout.addLayout(btn_row)
 
-        # Collapsible live preview accordion
-        self.preview_group = QGroupBox("Aperçu en direct (déplier)")
-        self.preview_group.setCheckable(True)
-        self.preview_group.setChecked(False)  # collapsed by default
-        preview_layout = QVBoxLayout(self.preview_group)
+        # Live preview accordion (clickable header + collapsible content)
+        self.preview_toggle = QToolButton()
+        self.preview_toggle.setText("Aperçu en direct")
+        self.preview_toggle.setCheckable(True)
+        self.preview_toggle.setChecked(False)
+        self.preview_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.preview_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.preview_toggle.setStyleSheet(
+            "QToolButton { border: none; font-weight: bold; padding: 6px; text-align: left; }"
+            "QToolButton:hover { background-color: rgba(0,0,0,0.05); }"
+        )
+        layout.addWidget(self.preview_toggle)
+
+        self.preview_content = QFrame()
+        self.preview_content.setFrameShape(QFrame.Shape.StyledPanel)
+        preview_layout = QVBoxLayout(self.preview_content)
+        preview_layout.setContentsMargins(4, 4, 4, 4)
         self.transcript_view = QTextEdit()
         self.transcript_view.setReadOnly(True)
         self.transcript_view.setStyleSheet("font-family: monospace; font-size: 10pt;")
         self.transcript_view.setMinimumHeight(180)
         preview_layout.addWidget(self.transcript_view)
-        layout.addWidget(self.preview_group)
+        layout.addWidget(self.preview_content)
 
-        # Hide/show the inner widget when checkbox toggles
-        self.preview_group.toggled.connect(self.transcript_view.setVisible)
-        self.transcript_view.setVisible(False)
+        self.preview_content.setVisible(False)
+        self.preview_toggle.toggled.connect(self._on_preview_toggled)
 
     def start_meeting(self):
         self.meeting_dir = meeting_dir()
@@ -587,6 +598,14 @@ class MeetingWindow(QMainWindow):
         m = int(seconds) // 60
         s = int(seconds) % 60
         return f"{m:02d}:{s:02d}"
+
+    def _on_preview_toggled(self, checked: bool):
+        self.preview_content.setVisible(checked)
+        self.preview_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+        )
+        if checked:
+            self.resize(self.width(), max(self.height(), 440))
 
     def stop_meeting(self):
         self._tick_timer.stop()
