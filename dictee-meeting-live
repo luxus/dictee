@@ -326,6 +326,95 @@ class DiarizationWorker(QObject):
             self.proc = None
 
 
+class AlignerWorker(QObject):
+    """Aligns Parakeet tokens with Sortformer segments by timestamp overlap.
+
+    For each token, picks the speaker with maximum overlap on [token.start_s, token.end_s].
+    Consecutive tokens with the same speaker are grouped into one line.
+    Local chunk timestamps are offset to absolute meeting timestamps via chunk_offset_s.
+
+    Logic ported from src/bin/transcribe_diarize_batch.rs:316-343.
+
+    Emits aligned(chunk_id, lines) where:
+      lines = [{"speaker": int, "text": str, "start_s": float, "end_s": float}, ...]
+    """
+
+    aligned = pyqtSignal(int, list)
+
+    def __init__(self, chunk_offset_s: dict = None):
+        super().__init__()
+        # chunk_id → absolute offset in seconds (set by orchestrator before each chunk)
+        self.chunk_offset = chunk_offset_s or {}
+        # Pending results: both tokens and segments must arrive before alignment
+        self._transcription = {}  # chunk_id → tokens
+        self._diarization = {}    # chunk_id → segments
+
+    def on_transcribed(self, chunk_id: int, tokens: list):
+        """Slot for TranscriptionWorker.transcribed signal."""
+        self._transcription[chunk_id] = tokens
+        self._try_align(chunk_id)
+
+    def on_diarized(self, chunk_id: int, segments: list):
+        """Slot for DiarizationWorker.diarized signal."""
+        self._diarization[chunk_id] = segments
+        self._try_align(chunk_id)
+
+    def _try_align(self, chunk_id: int):
+        if chunk_id not in self._transcription or chunk_id not in self._diarization:
+            return
+        tokens = self._transcription.pop(chunk_id)
+        segments = self._diarization.pop(chunk_id)
+        offset = self.chunk_offset.get(chunk_id, 0.0)
+
+        lines = []
+        current_speaker = None
+        current_text = []
+        current_start = None
+        current_end = None
+
+        for tok in tokens:
+            spk = self._find_speaker(tok["start_s"], tok["end_s"], segments)
+            if spk != current_speaker:
+                if current_speaker is not None:
+                    lines.append({
+                        "speaker": current_speaker,
+                        "text": " ".join(current_text).strip(),
+                        "start_s": current_start + offset,
+                        "end_s": current_end + offset,
+                    })
+                current_speaker = spk
+                current_text = [tok["text"]]
+                current_start = tok["start_s"]
+            else:
+                current_text.append(tok["text"])
+            current_end = tok["end_s"]
+
+        if current_speaker is not None:
+            lines.append({
+                "speaker": current_speaker,
+                "text": " ".join(current_text).strip(),
+                "start_s": current_start + offset,
+                "end_s": current_end + offset,
+            })
+
+        self.aligned.emit(chunk_id, lines)
+
+    @staticmethod
+    def _find_speaker(tok_start: float, tok_end: float, segments: list) -> int:
+        """Return the speaker_id with maximum overlap with [tok_start, tok_end].
+
+        Returns -1 if no segment overlaps (silence or out-of-range token).
+        """
+        best_spk = -1
+        best_overlap = 0.0
+        for seg in segments:
+            overlap = max(0.0, min(tok_end, seg["end_s"]) - max(tok_start, seg["start_s"]))
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_spk = seg["speaker_id"]
+        return best_spk
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
