@@ -44,6 +44,31 @@ def meeting_dir(timestamp=None):
     return base
 
 
+def _build_subprocess_env():
+    """Returns os.environ + ORT_DYLIB_PATH + all DICTEE_* keys from
+    ~/.config/dictee.conf. Used for Rust binaries that need to see
+    DICTEE_FORCE_CPU and friends.
+    """
+    env = os.environ.copy()
+    ort_lib = "/usr/lib/dictee/libonnxruntime.so"
+    if os.path.isfile(ort_lib):
+        env["ORT_DYLIB_PATH"] = ort_lib
+    conf_path = Path.home() / ".config/dictee.conf"
+    if conf_path.is_file():
+        try:
+            for line in conf_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                if k.startswith("DICTEE_"):
+                    env[k] = v.strip().strip('"').strip("'")
+        except OSError:
+            pass
+    return env
+
+
 # ---------------------------------------------------------------------------
 # Workers
 # ---------------------------------------------------------------------------
@@ -191,6 +216,7 @@ class TranscriptionWorker(QObject):
                 capture_output=True,
                 text=True,
                 timeout=20,
+                env=_build_subprocess_env(),
             )
             if proc.returncode != 0:
                 self.error.emit(
@@ -231,6 +257,7 @@ class DiarizationWorker(QObject):
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                env=_build_subprocess_env(),
             )
             # Wait for "ready" message on stderr (timeout 30s for slow CPU)
             deadline = time.monotonic() + 30
