@@ -37,6 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!();
         eprintln!("Usage:");
         eprintln!("  transcribe-client <fichier>       Transcrire un fichier audio (tout format)");
+        eprintln!("  transcribe-client <fichier> --json-timestamps  Sortie JSON avec timestamps");
         eprintln!("  cat audio | transcribe-client     Transcrire depuis stdin");
         eprintln!("  transcribe-client                 Enregistrer depuis le micro");
         eprintln!();
@@ -49,15 +50,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    let json_timestamps = args.iter().any(|a| a == "--json-timestamps");
+
     // Mode 1: Direct file path provided
-    if args.len() > 1 {
+    if args.len() > 1 && !args[1].starts_with('-') {
         let audio_path = resolve_path(&args[1])?;
         let (wav_path, needs_cleanup) = ensure_wav(&audio_path)?;
-        let text = send_to_daemon(&wav_path);
+        let result = if json_timestamps {
+            let raw = send_to_daemon_with_mode(&wav_path, "timestamps")?;
+            if needs_cleanup { let _ = fs::remove_file(&wav_path); }
+            println!("{}", parse_timestamps_to_json(&raw));
+            return Ok(());
+        } else {
+            send_to_daemon(&wav_path)
+        };
         if needs_cleanup {
             let _ = fs::remove_file(&wav_path);
         }
-        println!("{}", text?);
+        println!("{}", result?);
         return Ok(());
     }
 
@@ -337,6 +347,63 @@ fn ensure_wav(audio_path: &str) -> Result<(String, bool), Box<dyn std::error::Er
     }
 
     Ok((TEMP_CONVERTED.to_string(), true))
+}
+
+/// Parse daemon timestamp lines (`[0.50s - 1.20s] word`) into a JSON array.
+/// Output: `{"tokens":[{"text":"word","start_s":0.5,"end_s":1.2},...]}`
+fn parse_timestamps_to_json(raw: &str) -> String {
+    let mut tokens = Vec::new();
+    for line in raw.lines() {
+        // Expected format: "[0.50s - 1.20s] text"
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix('[') {
+            if let Some(close) = rest.find(']') {
+                let ts_part = &rest[..close];
+                let text = rest[close + 1..].trim();
+                // ts_part: "0.50s - 1.20s"
+                let parts: Vec<&str> = ts_part.splitn(3, " - ").collect();
+                if parts.len() == 2 {
+                    let start_s: f64 = parts[0].trim_end_matches('s').parse().unwrap_or(0.0);
+                    let end_s: f64 = parts[1].trim_end_matches('s').parse().unwrap_or(0.0);
+                    // Escape text for JSON (basic: backslash and double-quote)
+                    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
+                    tokens.push(format!(
+                        "{{\"text\":\"{}\",\"start_s\":{:.3},\"end_s\":{:.3}}}",
+                        escaped, start_s, end_s
+                    ));
+                }
+            }
+        }
+    }
+    format!("{{\"tokens\":[{}]}}", tokens.join(","))
+}
+
+fn send_to_daemon_with_mode(audio_path: &str, mode: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let mut stream = UnixStream::connect(SOCKET_PATH.as_str()).map_err(|e| {
+        format!(
+            "Cannot connect to daemon at {}. Is transcribe-daemon running? Error: {}",
+            SOCKET_PATH.as_str(), e
+        )
+    })?;
+    stream.set_read_timeout(Some(Duration::from_secs(120)))?;
+
+    writeln!(stream, "{}\t{}", audio_path, mode)?;
+    stream.flush()?;
+
+    // Timestamps mode returns multiple lines; read until EOF.
+    let mut response = String::new();
+    let reader = BufReader::new(&stream);
+    for line in reader.lines() {
+        let l = line?;
+        if !response.is_empty() { response.push('\n'); }
+        response.push_str(&l);
+    }
+
+    if response.starts_with("ERROR:") {
+        Err(response.into())
+    } else {
+        Ok(response)
+    }
 }
 
 fn send_to_daemon(audio_path: &str) -> Result<String, Box<dyn std::error::Error>> {

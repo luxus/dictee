@@ -7,6 +7,7 @@ sends chunks to Parakeet (via transcribe-daemon socket) and Sortformer
 and runs LLM summary at the end.
 """
 
+import json
 import os
 import sys
 import time
@@ -156,6 +157,57 @@ class ChunkerWorker(QThread):
 
     def stop(self):
         self._stop = True
+
+
+class TranscriptionWorker(QObject):
+    """Pour chaque chunk prêt, appelle transcribe-client et émet (chunk_id, tokens).
+
+    tokens = [{"text": str, "start_s": float, "end_s": float}, ...]
+    Utilise le transcribe-daemon existant (Parakeet INT8/FP32 déjà en RAM
+    via le service systemd utilisateur).
+    """
+
+    transcribed = pyqtSignal(int, list)
+    error = pyqtSignal(int, str)
+
+    # Socket path mirrors transcribe-client SOCKET_PATH logic:
+    # prefer $XDG_RUNTIME_DIR/transcribe.sock, fallback /tmp/transcribe-<uid>.sock
+    def __init__(self):
+        super().__init__()
+        xdg = os.environ.get("XDG_RUNTIME_DIR")
+        if xdg:
+            self.daemon_socket = os.path.join(xdg, "transcribe.sock")
+        else:
+            self.daemon_socket = f"/tmp/transcribe-{os.getuid()}.sock"
+
+    def transcribe(self, chunk_id: int, chunk_path: str):
+        """Slot connecté à ChunkerWorker.chunk_ready."""
+        if not os.path.exists(self.daemon_socket):
+            self.error.emit(
+                chunk_id,
+                f"socket transcribe-daemon absente ({self.daemon_socket})",
+            )
+            return
+        try:
+            proc = subprocess.run(
+                ["transcribe-client", chunk_path, "--json-timestamps"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if proc.returncode != 0:
+                self.error.emit(
+                    chunk_id,
+                    f"transcribe-client exit {proc.returncode}: {proc.stderr.strip()}",
+                )
+                return
+            data = json.loads(proc.stdout)
+            tokens = data.get("tokens", [])
+            self.transcribed.emit(chunk_id, tokens)
+        except subprocess.TimeoutExpired:
+            self.error.emit(chunk_id, "transcribe-client timeout (>20 s)")
+        except json.JSONDecodeError as e:
+            self.error.emit(chunk_id, f"JSON parse error: {e}")
 
 
 # ---------------------------------------------------------------------------
