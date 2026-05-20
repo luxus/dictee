@@ -5828,7 +5828,9 @@ class DicteeSetupDialog(QDialog):
         layout.addWidget(self.led_meeting_dir)
 
         layout.addSpacing(12)
-        layout.addWidget(QLabel(_("Live preview chunk duration (seconds):")))
+        lay_chunk = QHBoxLayout()
+        lay_chunk.setSpacing(8)
+        lay_chunk.addWidget(QLabel(_("Live preview chunk duration:")))
         self.sld_chunk = QSlider(Qt.Orientation.Horizontal)
         self.sld_chunk.setMinimum(20)
         self.sld_chunk.setMaximum(60)
@@ -5838,20 +5840,23 @@ class DicteeSetupDialog(QDialog):
             self.sld_chunk.setValue(40)
         self.lbl_chunk = QLabel(f"{self.sld_chunk.value()} s")
         self.sld_chunk.valueChanged.connect(lambda v: self.lbl_chunk.setText(f"{v} s"))
-        layout.addWidget(self.sld_chunk)
-        layout.addWidget(self.lbl_chunk)
+        lay_chunk.addWidget(self.sld_chunk, 1)
+        lay_chunk.addWidget(self.lbl_chunk)
+        layout.addLayout(lay_chunk)
 
         layout.addSpacing(12)
         layout.addWidget(QLabel("<b>" + _("Window behavior") + "</b>"))
 
-        self.chk_meeting_on_top = QCheckBox(_("Always keep window on top"))
-        _on_top = self.conf.get("DICTEE_MEETING_ALWAYS_ON_TOP", "true").lower() == "true"
-        self.chk_meeting_on_top.setChecked(_on_top)
+        self.chk_meeting_on_top = ToggleSwitch(_("Always keep window on top"))
+        self.chk_meeting_on_top.setChecked(
+            self.conf.get("DICTEE_MEETING_ALWAYS_ON_TOP", "true").lower() == "true"
+        )
         layout.addWidget(self.chk_meeting_on_top)
 
-        self.chk_meeting_all_desktops = QCheckBox(_("Show window on all virtual desktops"))
-        _all_desktops = self.conf.get("DICTEE_MEETING_ALL_DESKTOPS", "false").lower() == "true"
-        self.chk_meeting_all_desktops.setChecked(_all_desktops)
+        self.chk_meeting_all_desktops = ToggleSwitch(_("Show window on all virtual desktops"))
+        self.chk_meeting_all_desktops.setChecked(
+            self.conf.get("DICTEE_MEETING_ALL_DESKTOPS", "false").lower() == "true"
+        )
         layout.addWidget(self.chk_meeting_all_desktops)
 
         layout.addStretch()
