@@ -812,12 +812,12 @@ RowLayout {
         PlasmaComponents.Label {
             text: "GPU"
             Layout.alignment: Qt.AlignVCenter
-            visible: fullRep.dicteeConfigured && root.cudaSupportInstalled
+            visible: fullRep.dicteeConfigured
         }
 
         QQC2.Switch {
             id: forceCpuSwitch
-            visible: fullRep.dicteeConfigured && root.cudaSupportInstalled
+            visible: fullRep.dicteeConfigured
             enabled: !cooldownTimer.running  // debounce: ~2 s after each click
             checked: root.forceCpuActive
             property bool syncing: false  // skip onToggled when syncing from main.qml
@@ -869,10 +869,10 @@ RowLayout {
         PlasmaComponents.Label {
             text: "CPU"
             Layout.alignment: Qt.AlignVCenter
-            visible: fullRep.dicteeConfigured && root.cudaSupportInstalled
+            visible: fullRep.dicteeConfigured
         }
 
-        Item { Layout.preferredWidth: Kirigami.Units.largeSpacing; visible: fullRep.dicteeConfigured && root.cudaSupportInstalled }
+        Item { Layout.preferredWidth: Kirigami.Units.largeSpacing; visible: fullRep.dicteeConfigured }
 
         ThemedButton {
             text: i18n("Configure Dictée")
