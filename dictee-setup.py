@@ -5624,8 +5624,8 @@ class DicteeSetupDialog(QDialog):
         _add(pp_root, _("Dictionary"), 8, 3)
         _add(pp_root, _("LLM"), 8, 4)
         pp_root.setExpanded(True)
+        _add(tree, _("Live meeting"), 10)
         _add(tree, _("LLM Diarization"), 9)
-        _add(tree, _("Meeting"), 10)
         _add(tree, _("About"), 11)
 
         def _on_item_changed(current, previous):
