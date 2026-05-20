@@ -454,6 +454,7 @@ class MeetingWindow(QMainWindow):
         self._tick_timer.setInterval(1000)
 
         self._build_ui()
+        self._apply_window_behavior()
 
         # Signal to plasmoid/tray that meeting-live UI is open
         try:
@@ -521,6 +522,64 @@ class MeetingWindow(QMainWindow):
 
         self.preview_content.setVisible(False)
         self.preview_toggle.toggled.connect(self._on_preview_toggled)
+
+    def _apply_window_behavior(self):
+        """Apply always-on-top and all-virtual-desktops options from conf."""
+        conf_path = Path.home() / ".config/dictee.conf"
+        always_on_top = True   # default
+        all_desktops = False   # default
+        if conf_path.is_file():
+            try:
+                for line in conf_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("DICTEE_MEETING_ALWAYS_ON_TOP="):
+                        v = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+                        always_on_top = v in ("true", "1", "yes")
+                    elif line.startswith("DICTEE_MEETING_ALL_DESKTOPS="):
+                        v = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+                        all_desktops = v in ("true", "1", "yes")
+            except OSError:
+                pass
+
+        if always_on_top:
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+
+        if all_desktops:
+            QTimer.singleShot(100, self._set_on_all_desktops)
+
+    def _set_on_all_desktops(self):
+        """Set the window visible on all virtual desktops.
+
+        On X11: uses wmctrl (add,sticky).
+        On Wayland/KDE: not yet supported — shows a notify-send notice.
+        Silently no-ops on unsupported platforms.
+        """
+        try:
+            win_id = int(self.winId())
+        except Exception:
+            return
+
+        if os.environ.get("XDG_SESSION_TYPE", "") == "x11":
+            try:
+                subprocess.run(
+                    ["wmctrl", "-i", "-r", str(win_id), "-b", "add,sticky"],
+                    timeout=2, capture_output=True,
+                )
+                return
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # Wayland: no reliable cross-compositor API without KWindowSystem (PyKF5).
+        try:
+            subprocess.run(
+                ["notify-send", "-t", "5000",
+                 "dictee-meeting-live",
+                 "All desktops option not yet supported on Wayland — "
+                 "window will only show on current desktop."],
+                timeout=2, capture_output=True,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
     def start_meeting(self):
         self.meeting_dir = meeting_dir()

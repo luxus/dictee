@@ -386,6 +386,8 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 force_cpu=None,
                 meeting_dir="",
                 meeting_chunk_s=40,
+                meeting_always_on_top=True,
+                meeting_all_desktops=False,
                 mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
@@ -540,6 +542,8 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
     if meeting_dir:
         values["DICTEE_MEETING_DIR"] = _s(meeting_dir)
     values["DICTEE_MEETING_CHUNK_S"] = str(max(20, min(60, int(meeting_chunk_s))))
+    values["DICTEE_MEETING_ALWAYS_ON_TOP"] = "true" if meeting_always_on_top else "false"
+    values["DICTEE_MEETING_ALL_DESKTOPS"] = "true" if meeting_all_desktops else "false"
 
     # Keys that must be re-commented when absent from values.
     # Without this, a previously active key stays active forever.
@@ -5836,6 +5840,19 @@ class DicteeSetupDialog(QDialog):
         self.sld_chunk.valueChanged.connect(lambda v: self.lbl_chunk.setText(f"{v} s"))
         layout.addWidget(self.sld_chunk)
         layout.addWidget(self.lbl_chunk)
+
+        layout.addSpacing(12)
+        layout.addWidget(QLabel("<b>" + _("Window behavior") + "</b>"))
+
+        self.chk_meeting_on_top = QCheckBox(_("Always keep window on top"))
+        _on_top = self.conf.get("DICTEE_MEETING_ALWAYS_ON_TOP", "true").lower() == "true"
+        self.chk_meeting_on_top.setChecked(_on_top)
+        layout.addWidget(self.chk_meeting_on_top)
+
+        self.chk_meeting_all_desktops = QCheckBox(_("Show window on all virtual desktops"))
+        _all_desktops = self.conf.get("DICTEE_MEETING_ALL_DESKTOPS", "false").lower() == "true"
+        self.chk_meeting_all_desktops.setChecked(_all_desktops)
+        layout.addWidget(self.chk_meeting_all_desktops)
 
         layout.addStretch()
         return page
@@ -18083,6 +18100,12 @@ class DicteeSetupDialog(QDialog):
                     meeting_chunk_s=(
                         self.sld_chunk.value()
                         if hasattr(self, 'sld_chunk') else 40),
+                    meeting_always_on_top=(
+                        self.chk_meeting_on_top.isChecked()
+                        if hasattr(self, 'chk_meeting_on_top') else True),
+                    meeting_all_desktops=(
+                        self.chk_meeting_all_desktops.isChecked()
+                        if hasattr(self, 'chk_meeting_all_desktops') else False),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.
