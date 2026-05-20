@@ -4239,14 +4239,20 @@ class LLMProviderEditDialog(QDialog):
         self._num_ctx_spin.setRange(512, 131072)
         self._num_ctx_spin.setSingleStep(2048)
         self._num_ctx_spin.setValue(int((provider or {}).get("num_ctx", 16384)))
-        self._num_ctx_spin.setSuffix(" " + _("tokens"))
         self._num_ctx_spin.setToolTip(_tt(_(
             "Context window passed to Ollama (num_ctx). Defaults to 2048 "
             "in Ollama itself — too small for full transcripts. 16384 "
             "covers a 30-min audio without hallucinating; raise if your "
             "transcripts are longer.")))
         self._lbl_num_ctx = QLabel(_("Context window:"))
-        form.addRow(self._lbl_num_ctx, self._num_ctx_spin)
+        _num_ctx_w = QWidget()
+        _num_ctx_lay = QHBoxLayout(_num_ctx_w)
+        _num_ctx_lay.setContentsMargins(0, 0, 0, 0)
+        _num_ctx_lay.setSpacing(6)
+        _num_ctx_lay.addWidget(self._num_ctx_spin)
+        _num_ctx_lay.addWidget(QLabel(_("tokens")))
+        _num_ctx_lay.addStretch()
+        form.addRow(self._lbl_num_ctx, _num_ctx_w)
 
         self._no_think_check = QCheckBox(
             _("Disable thinking (reasoning models)"))
@@ -6313,17 +6319,25 @@ class DicteeSetupDialog(QDialog):
 
         lay_ctx = QHBoxLayout()
         lay_ctx.setSpacing(8)
-        lbl_ctx = QLabel(_("Context duration (seconds):"))
-        lbl_ctx.setToolTip(_tt(_("Maximum duration of accumulated audio context. Also the inactivity timeout: the buffer expires after this many seconds without a non-empty dictation.")))
+        self.lbl_audio_context = QLabel(_("Context duration:"))
+        self.lbl_audio_context.setToolTip(_tt(_("Maximum duration of accumulated audio context. Also the inactivity timeout: the buffer expires after this many seconds without a non-empty dictation.")))
         self.spin_audio_context_timeout = QSpinBox()
         self.spin_audio_context_timeout.setRange(5, 120)
         self.spin_audio_context_timeout.setValue(
             int(conf.get("DICTEE_AUDIO_CONTEXT_TIMEOUT", "30")))
-        self.spin_audio_context_timeout.setSuffix(" s")
-        lay_ctx.addWidget(lbl_ctx)
+        self.lbl_audio_context_unit = QLabel(_("seconds"))
+        lay_ctx.addWidget(self.lbl_audio_context)
         lay_ctx.addWidget(self.spin_audio_context_timeout)
+        lay_ctx.addWidget(self.lbl_audio_context_unit)
         lay_ctx.addStretch()
         lay_opt.addLayout(lay_ctx)
+        # Grey out the duration row when "Audio context buffer" is off
+        def _sync_audio_ctx_enabled(checked):
+            self.lbl_audio_context.setEnabled(checked)
+            self.spin_audio_context_timeout.setEnabled(checked)
+            self.lbl_audio_context_unit.setEnabled(checked)
+        _sync_audio_ctx_enabled(self.chk_audio_context.isChecked())
+        self.chk_audio_context.toggled.connect(_sync_audio_ctx_enabled)
 
         self.chk_debug = ToggleSwitch(_("Debug mode (log to /tmp)"))
         self.chk_debug.setChecked(conf.get("DICTEE_DEBUG", "true") == "true")
