@@ -174,6 +174,16 @@ PlasmoidItem {
                 if (parts.length >= 13) {
                     var fc = (parts[12] || "0").toLowerCase()
                     root.forceCpuActive = (fc === "1" || fc === "true" || fc === "yes")
+                    // Auto-reset DICTEE_FORCE_CPU if the constraint forces a position
+                    // and the conf disagrees — but never while the daemon is busy.
+                    var _idleStates = ["idle", "offline"]
+                    if (!root.forceCpuSensitive && _idleStates.indexOf(root.state) !== -1) {
+                        var _wantCpu = (root.forceCpuForcedPosition === "cpu")
+                        var _currentCpu = (fc === "1" || fc === "true" || fc === "yes")
+                        if (_wantCpu !== _currentCpu) {
+                            executable.run("dictee-switch-backend force_cpu " + (_wantCpu ? "1" : "0"))
+                        }
+                    }
                 }
             } else if (source === readGpuVramCmd) {
                 // Parse "nvidia-smi memory.total" output: a single integer in MB,
@@ -372,6 +382,45 @@ PlasmoidItem {
     // right one of the 6 warning cases (same logic as dictee-setup.py
     // _refresh_force_cpu_warning and dictee-tray.py _force_cpu_warning).
     property real gpuVramGb: 0.0
+
+    // Compute Force CPU switch constraint from current backend + quant + GPU state.
+    // Returns { sensitive: bool, forced: "cpu"|"gpu"|null, tooltip: string|null }.
+    // Mirrors _force_cpu_constraint() in dictee-tray.py — keep in sync.
+    function _forceCpuConstraint(backend, quant, vram) {
+        var b = (backend || "parakeet").toLowerCase()
+        var q = (quant || "fp32").toLowerCase()
+        var hasGpu = (vram || 0) > 0
+
+        if (b === "canary") {
+            return {
+                sensitive: false,
+                forced: "gpu",
+                tooltip: hasGpu
+                    ? i18n("Canary requires NVIDIA GPU (encoder too heavy for CPU)")
+                    : i18n("Canary requires NVIDIA GPU — none detected, transcription will fail")
+            }
+        }
+        if (b === "vosk") {
+            return { sensitive: false, forced: "cpu",
+                     tooltip: i18n("Vosk runs on CPU by design") }
+        }
+        if (b === "parakeet" && q === "int8") {
+            return { sensitive: false, forced: "cpu",
+                     tooltip: i18n("Parakeet INT8 is CPU-optimized (GPU is 5× slower)") }
+        }
+        if (!hasGpu) {
+            return { sensitive: false, forced: "cpu",
+                     tooltip: i18n("No NVIDIA GPU detected") }
+        }
+        return { sensitive: true, forced: null, tooltip: null }
+    }
+
+    // Computed constraint — updates automatically when backend/quant/VRAM change.
+    readonly property var forceCpuConstraint: _forceCpuConstraint(root.currentAsrBackend, root.currentParakeetQuant, root.gpuVramGb)
+    // Convenience properties consumed by FullRepresentation.qml
+    readonly property bool forceCpuSensitive: forceCpuConstraint.sensitive
+    readonly property string forceCpuForcedPosition: forceCpuConstraint.forced || ""
+    readonly property string forceCpuConstrainedTooltip: forceCpuConstraint.tooltip || ""
     property string readGpuVramCmd: "bash -c \"nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' '\""
     property string currentAudioSource: ""
     property var audioSourceList: []

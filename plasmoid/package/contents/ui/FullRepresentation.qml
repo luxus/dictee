@@ -818,14 +818,28 @@ RowLayout {
         QQC2.Switch {
             id: forceCpuSwitch
             visible: fullRep.dicteeConfigured
-            enabled: !cooldownTimer.running  // debounce: ~2 s after each click
-            checked: root.forceCpuActive
+            // Disabled when the constraint locks the position (Canary/Vosk/INT8/no-GPU),
+            // or during cooldown debounce, or when dictee is not configured.
+            enabled: root.forceCpuSensitive && !cooldownTimer.running && fullRep.dicteeConfigured
+            // When constrained, show the forced position; otherwise follow conf.
+            checked: !root.forceCpuSensitive
+                ? (root.forceCpuForcedPosition === "cpu")
+                : root.forceCpuActive
             property bool syncing: false  // skip onToggled when syncing from main.qml
             Connections {
                 target: root
                 function onForceCpuActiveChanged() {
                     forceCpuSwitch.syncing = true
-                    forceCpuSwitch.checked = root.forceCpuActive
+                    forceCpuSwitch.checked = !root.forceCpuSensitive
+                        ? (root.forceCpuForcedPosition === "cpu")
+                        : root.forceCpuActive
+                    forceCpuSwitch.syncing = false
+                }
+                function onForceCpuSensitiveChanged() {
+                    forceCpuSwitch.syncing = true
+                    forceCpuSwitch.checked = !root.forceCpuSensitive
+                        ? (root.forceCpuForcedPosition === "cpu")
+                        : root.forceCpuActive
                     forceCpuSwitch.syncing = false
                 }
             }
@@ -840,13 +854,16 @@ RowLayout {
             }
             onToggled: {
                 if (syncing) return
+                if (!root.forceCpuSensitive) return  // constrained — ignore spurious toggles
                 executable.run("dictee-switch-backend force_cpu " + (checked ? "1" : "0"))
                 cooldownTimer.restart()
             }
-            // Short tooltip — same 6 cases as the tray's _force_cpu_warning,
-            // intentionally minimal. The detailed multi-line warning lives in
-            // dictee-setup, not here.
+            // Short tooltip — when constrained, return the constraint reason;
+            // otherwise the same 6 cases as the tray's _force_cpu_warning.
             function _forceCpuWarning() {
+                if (!root.forceCpuSensitive) {
+                    return root.forceCpuConstrainedTooltip
+                }
                 var vram = root.gpuVramGb
                 if (forceCpuSwitch.checked) {
                     if (vram >= 4)

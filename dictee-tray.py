@@ -255,6 +255,72 @@ def _force_cpu_warning(forcing_cpu, vram_gb):
     return _("No GPU detected")
 
 
+def _force_cpu_constraint(backend, parakeet_quant, vram_gb):
+    """Compute the Force CPU switch state from current settings.
+
+    Returns a dict:
+      sensitive: bool  (False = grey out / disabled)
+      forced:    "cpu" | "gpu" | None  (position to force; None = user-controlled)
+      tooltip:   str  (always set when sensitive=False, None when sensitive=True)
+    """
+    backend = (backend or "parakeet").lower()
+    quant = (parakeet_quant or "fp32").lower()
+    has_gpu = (vram_gb or 0) > 0
+
+    # Canary requires GPU regardless of GPU availability
+    if backend == "canary":
+        if has_gpu:
+            tooltip = _("Canary requires NVIDIA GPU (encoder too heavy for CPU)")
+        else:
+            tooltip = _("Canary requires NVIDIA GPU — none detected, transcription will fail")
+        return {"sensitive": False, "forced": "gpu", "tooltip": tooltip}
+
+    # Vosk is CPU only by design
+    if backend == "vosk":
+        return {"sensitive": False, "forced": "cpu",
+                "tooltip": _("Vosk runs on CPU by design")}
+
+    # Parakeet INT8 is CPU-optimized (GPU is 5× slower per 2026-05-15 bench)
+    if backend == "parakeet" and quant == "int8":
+        return {"sensitive": False, "forced": "cpu",
+                "tooltip": _("Parakeet INT8 is CPU-optimized (GPU is 5× slower)")}
+
+    # No GPU detected → can only run on CPU
+    if not has_gpu:
+        return {"sensitive": False, "forced": "cpu",
+                "tooltip": _("No NVIDIA GPU detected")}
+
+    # Backend supports both, GPU available → user has free choice
+    return {"sensitive": True, "forced": None, "tooltip": None}
+
+
+def _maybe_sync_force_cpu(constraint, want_cpu_bool, current_fc_raw):
+    """If the constraint forces a specific DICTEE_FORCE_CPU value and the conf
+    disagrees, run dictee-switch-backend to align.  Skipped when the daemon is
+    busy to avoid a mid-task restart.
+
+    Parameters
+    ----------
+    constraint : dict  — return value of _force_cpu_constraint()
+    want_cpu_bool : bool — the desired checkbox position (True = CPU)
+    current_fc_raw : str — raw DICTEE_FORCE_CPU value read from conf (lower-cased)
+    """
+    if constraint["forced"] is None:
+        # User-controlled — nothing to align
+        return
+    current_fc_bool = current_fc_raw in ("1", "true", "yes")
+    if want_cpu_bool == current_fc_bool:
+        # Already aligned
+        return
+    # Skip while daemon is busy
+    state = read_state()
+    if state in ("recording", "transcribing", "diarizing", "preparing",
+                 "diarize-ready", "meeting-ui-open", "meeting-recording"):
+        return
+    subprocess.Popen(["dictee-switch-backend", "force_cpu",
+                      "1" if want_cpu_bool else "0"])
+
+
 def _sortformer_available():
     """Check if the Sortformer diarization model is installed."""
     dd = os.path.join(
@@ -674,11 +740,19 @@ class DicteeTrayAppIndicator:
         # — refreshed on every menu popup by the Gtk equivalent of
         # _refresh_menu_toggles_qt with the right 6-case message.
         self.item_force_cpu_gtk = Gtk.CheckMenuItem(label=_("Force CPU (no GPU)"))
+        _backend = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
+        _quant = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+        _vram = _detect_gpu_vram_gb()
         _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
         _initial_force = _fc in ("1", "true", "yes")
+        _c = _force_cpu_constraint(_backend, _quant, _vram)
+        if _c["forced"] is not None:
+            _initial_force = (_c["forced"] == "cpu")
         self.item_force_cpu_gtk.set_active(_initial_force)
+        self.item_force_cpu_gtk.set_sensitive(_c["sensitive"])
         self.item_force_cpu_gtk.set_tooltip_text(
-            _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
+            _c["tooltip"] if not _c["sensitive"]
+            else _force_cpu_warning(_initial_force, _vram))
         self.item_force_cpu_gtk.connect("toggled", self._on_force_cpu_toggled_gtk)
         self.menu.append(self.item_force_cpu_gtk)
 
@@ -732,11 +806,20 @@ class DicteeTrayAppIndicator:
             trpp_st = read_conf_value("DICTEE_TRPP_SHORT_TEXT", "true").lower() == "true"
             _set(self.item_short_gtk, pp_st or trpp_st, self._on_short_toggled_gtk)
         if hasattr(self, "item_force_cpu_gtk"):
+            _backend = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
+            _quant = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+            _vram = _detect_gpu_vram_gb()
             _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
             _forcing = _fc in ("1", "true", "yes")
+            _c = _force_cpu_constraint(_backend, _quant, _vram)
+            if _c["forced"] is not None:
+                _forcing = (_c["forced"] == "cpu")
             _set(self.item_force_cpu_gtk, _forcing, self._on_force_cpu_toggled_gtk)
+            self.item_force_cpu_gtk.set_sensitive(_c["sensitive"])
             self.item_force_cpu_gtk.set_tooltip_text(
-                _force_cpu_warning(_forcing, _detect_gpu_vram_gb()))
+                _c["tooltip"] if not _c["sensitive"]
+                else _force_cpu_warning(_forcing, _vram))
+            _maybe_sync_force_cpu(_c, _forcing, _fc)
 
     def _on_daemon_toggle(self, _item):
         if self.state == "offline":
@@ -1087,11 +1170,19 @@ class DicteeTrayQt:
         # (forcing_cpu × VRAM tier).
         self.action_force_cpu_qt = self.menu.addAction(_("Force CPU (no GPU)"))
         self.action_force_cpu_qt.setCheckable(True)
+        _backend = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
+        _quant = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+        _vram = _detect_gpu_vram_gb()
         _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
         _initial_force = _fc in ("1", "true", "yes")
+        _c = _force_cpu_constraint(_backend, _quant, _vram)
+        if _c["forced"] is not None:
+            _initial_force = (_c["forced"] == "cpu")
         self.action_force_cpu_qt.setChecked(_initial_force)
+        self.action_force_cpu_qt.setEnabled(_c["sensitive"])
         self.action_force_cpu_qt.setToolTip(
-            _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
+            _c["tooltip"] if not _c["sensitive"]
+            else _force_cpu_warning(_initial_force, _vram))
         self.action_force_cpu_qt.toggled.connect(self._on_force_cpu_toggled_qt)
 
         self.menu.addSeparator()
@@ -1222,12 +1313,22 @@ class DicteeTrayQt:
             trpp_st = read_conf_value("DICTEE_TRPP_SHORT_TEXT", "true").lower() == "true"
             _set(self.action_short_qt, pp_st or trpp_st)
         if hasattr(self, "action_force_cpu_qt"):
-            _forcing = read_conf_value("DICTEE_FORCE_CPU", "0").lower() in ("1", "true", "yes")
+            _backend = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
+            _quant = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+            _vram = _detect_gpu_vram_gb()
+            _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
+            _forcing = _fc in ("1", "true", "yes")
+            _c = _force_cpu_constraint(_backend, _quant, _vram)
+            if _c["forced"] is not None:
+                _forcing = (_c["forced"] == "cpu")
             _set(self.action_force_cpu_qt, _forcing)
+            self.action_force_cpu_qt.setEnabled(_c["sensitive"])
             # Refresh the dynamic warning tooltip each time the menu opens so
             # it stays accurate after external changes (setup, CLI, plasmoid).
             self.action_force_cpu_qt.setToolTip(
-                _force_cpu_warning(_forcing, _detect_gpu_vram_gb()))
+                _c["tooltip"] if not _c["sensitive"]
+                else _force_cpu_warning(_forcing, _vram))
+            _maybe_sync_force_cpu(_c, _forcing, _fc)
 
     def _delayed_daemon_refresh(self):
         self._check_daemon()
