@@ -5820,12 +5820,18 @@ class DicteeSetupDialog(QDialog):
 
         layout.addSpacing(12)
         layout.addWidget(QLabel(_("Save folder:")))
+        lay_dir = QHBoxLayout()
+        lay_dir.setSpacing(8)
         self.led_meeting_dir = QLineEdit(
             self.conf.get("DICTEE_MEETING_DIR",
                           os.path.join(os.path.expanduser("~"),
                                        ".local", "share", "dictee", "meetings"))
         )
-        layout.addWidget(self.led_meeting_dir)
+        btn_browse_meeting_dir = QPushButton(_("Browse..."))
+        btn_browse_meeting_dir.clicked.connect(self._browse_meeting_dir)
+        lay_dir.addWidget(self.led_meeting_dir, 1)
+        lay_dir.addWidget(btn_browse_meeting_dir)
+        layout.addLayout(lay_dir)
 
         layout.addSpacing(12)
         lay_chunk = QHBoxLayout()
@@ -5861,6 +5867,19 @@ class DicteeSetupDialog(QDialog):
 
         layout.addStretch()
         return page
+
+    def _browse_meeting_dir(self):
+        """Open a directory picker to set the meeting save folder."""
+        from PyQt6.QtWidgets import QFileDialog
+        current = self.led_meeting_dir.text().strip() or os.path.join(
+            os.path.expanduser("~"), ".local", "share", "dictee", "meetings"
+        )
+        path = QFileDialog.getExistingDirectory(
+            self, _("Select meeting save folder"), current,
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if path:
+            self.led_meeting_dir.setText(path)
 
     @staticmethod
     def _detect_install_type():
