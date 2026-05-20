@@ -225,51 +225,56 @@ impl Sortformer {
         self.n_sil_frames = 0;
     }
 
-    /// Main diarization entry point
+    /// Main diarization entry point for a complete, independent audio file.
+    ///
+    /// Resets streaming state before processing, then delegates to
+    /// `diarize_streaming()`. Use this when each call is independent (batch mode).
+    /// Use `diarize_streaming()` directly when processing successive chunks that
+    /// belong to the same session.
     pub fn diarize(
+        &mut self,
+        audio: Vec<f32>,
+        sample_rate: u32,
+        channels: u16,
+    ) -> Result<Vec<SpeakerSegment>> {
+        self.reset_state();
+        self.diarize_streaming(audio, sample_rate, channels)
+    }
+
+    /// Process audio while preserving streaming state across calls.
+    ///
+    /// Unlike `diarize()`, this does NOT reset state before processing, so
+    /// speaker IDs remain stable across successive chunk boundaries.
+    /// Call `reset_state()` explicitly between independent sessions.
+    pub fn diarize_streaming(
         &mut self,
         mut audio: Vec<f32>,
         sample_rate: u32,
         channels: u16,
     ) -> Result<Vec<SpeakerSegment>> {
-        // Resample if needed
         if sample_rate != SAMPLE_RATE as u32 {
             return Err(Error::Audio(format!(
                 "Expected {} Hz, got {} Hz",
                 SAMPLE_RATE, sample_rate
             )));
         }
-
-        // Convert to mono
         if channels > 1 {
             audio = audio
                 .chunks(channels as usize)
                 .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
                 .collect();
         }
-
-        // Reset state for new audio
-        self.reset_state();
-
-        // Extract mel features (B, T, D)
+        // No reset_state() here — state carries over from previous chunk
         let features = self.extract_mel_features(&audio);
         let total_frames = features.shape()[1];
-
-        // Process in chunks
         let chunk_stride = CHUNK_LEN * SUBSAMPLING;
         let num_chunks = (total_frames + chunk_stride - 1) / chunk_stride;
-
         let mut all_chunk_preds = Vec::new();
-
         for chunk_idx in 0..num_chunks {
             let start = chunk_idx * chunk_stride;
             let end = (start + chunk_stride).min(total_frames);
             let current_len = end - start;
-
-            // Extract chunk features
             let mut chunk_feat = features.slice(s![.., start..end, ..]).to_owned();
-
-            // Pad last chunk if needed
             if current_len < chunk_stride {
                 let mut padded = Array3::zeros((1, chunk_stride, N_MELS));
                 padded
@@ -277,26 +282,16 @@ impl Sortformer {
                     .assign(&chunk_feat);
                 chunk_feat = padded;
             }
-
-            // Run streaming update
             let chunk_preds = self.streaming_update(&chunk_feat, current_len)?;
             all_chunk_preds.push(chunk_preds);
         }
-
-        // Concatenate all predictions
         let full_preds = Self::concat_predictions(&all_chunk_preds);
-
-        // Apply median filtering
         let filtered_preds = if self.config.median_window > 1 {
             self.median_filter(&full_preds)
         } else {
             full_preds
         };
-
-        // Binarize to segments
-        let segments = self.binarize(&filtered_preds);
-
-        Ok(segments)
+        Ok(self.binarize(&filtered_preds))
     }
 
     /// NeMo's streaming_update with smart cache compression

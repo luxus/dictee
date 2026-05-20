@@ -935,6 +935,13 @@ RowLayout {
         }
 
         PlasmaComponents.ToolButton {
+            icon.name: "media-record"
+            display: PlasmaComponents.AbstractButton.IconOnly
+            onClicked: fullRep.actionRequested("meeting-live")
+            PlasmaComponents.ToolTip { text: i18n("Start live meeting transcription") }
+        }
+
+        PlasmaComponents.ToolButton {
             icon.name: "view-list-text"
             display: PlasmaComponents.AbstractButton.IconOnly
             onClicked: fullRep.actionRequested("cheatsheet")

@@ -714,6 +714,9 @@ PlasmoidItem {
             root.activeButton = ""
             break
         }
+        case "meeting-live":
+            executable.run("dictee-meeting-live --start")
+            break
         case "cheatsheet":
             executable.run("dictee-cheatsheet --toggle")
             break
