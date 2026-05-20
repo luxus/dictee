@@ -453,7 +453,7 @@ RowLayout {
                 id: btnMeeting
                 Layout.fillWidth: true
                 text: i18n("Meeting")
-                icon.name: "media-record"
+                icon.name: "meeting-attending"
                 enabled: fullRep.state !== "meeting-ui-open" && fullRep.state !== "meeting-recording"
                 onClicked: fullRep.actionRequested("meeting-live")
                 tooltipText: fullRep.state === "meeting-ui-open"
