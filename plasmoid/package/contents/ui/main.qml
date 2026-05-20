@@ -207,6 +207,8 @@ PlasmoidItem {
                 if (parts.length > 2) {
                     root.sortformerAvailable = parts[2].trim().indexOf("sortformer") !== -1
                 }
+            } else if (source === cudaCheckCmd) {
+                root.cudaSupportInstalled = (stdout.trim() === "cuda-yes")
             } else if (source === listAudioSourcesCmd) {
                 var lines = stdout.trim().split("\n").filter(function(s) { return s.length > 0 })
                 var sources = []
@@ -367,6 +369,9 @@ PlasmoidItem {
     property bool llmPostprocessEnabled: false
     property string currentParakeetQuant: "fp32"  // "fp32" or "int8" — Parakeet model variant
     property bool forceCpuActive: false           // DICTEE_FORCE_CPU=1 → true
+    // True when dictee-cuda is installed (provides libonnxruntime_providers_cuda.so).
+    // False = dictee-cpu only or no dictee package → Force CPU toggle is useless.
+    property bool cudaSupportInstalled: false
     // Total NVIDIA VRAM in GB (0.0 if no NVIDIA / nvidia-smi missing).
     // Probed once at startup; used by the Force CPU tooltip to compute the
     // right one of the 6 warning cases (same logic as dictee-setup.py
@@ -793,8 +798,11 @@ PlasmoidItem {
     }
 
     // Load debug flag — daemon level lancé à la demande via onExpandedChanged/onEffectiveStateChanged
+    property string cudaCheckCmd: "test -e /usr/lib/dictee/libonnxruntime_providers_cuda.so && echo cuda-yes #cuda"
+
     Component.onCompleted: {
         executable.run("bash -c 'grep -q \"^DICTEE_DEBUG=true\" \"${XDG_CONFIG_HOME:-$HOME/.config}/dictee.conf\" 2>/dev/null && echo DICTEE_DEBUG_ON'")
+        executable.run(cudaCheckCmd)
         refreshBackends()
     }
 

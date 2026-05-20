@@ -670,17 +670,18 @@ class DicteeTrayAppIndicator:
         self.item_short_gtk.connect("toggled", self._on_short_toggled_gtk)
         self.menu.append(self.item_short_gtk)
 
-        # Force CPU toggle (applies to all ASR backends). Tooltip is dynamic
-        # — refreshed on every menu popup by the Gtk equivalent of
-        # _refresh_menu_toggles_qt with the right 6-case message.
-        self.item_force_cpu_gtk = Gtk.CheckMenuItem(label=_("Force CPU (no GPU)"))
-        _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
-        _initial_force = _fc in ("1", "true", "yes")
-        self.item_force_cpu_gtk.set_active(_initial_force)
-        self.item_force_cpu_gtk.set_tooltip_text(
-            _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
-        self.item_force_cpu_gtk.connect("toggled", self._on_force_cpu_toggled_gtk)
-        self.menu.append(self.item_force_cpu_gtk)
+        # Force CPU toggle (only when dictee-cuda is installed — CPU-only build
+        # has no CUDA provider; the toggle would have no effect).
+        _cuda_lib = "/usr/lib/dictee/libonnxruntime_providers_cuda.so"
+        if os.path.isfile(_cuda_lib):
+            self.item_force_cpu_gtk = Gtk.CheckMenuItem(label=_("Force CPU (no GPU)"))
+            _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
+            _initial_force = _fc in ("1", "true", "yes")
+            self.item_force_cpu_gtk.set_active(_initial_force)
+            self.item_force_cpu_gtk.set_tooltip_text(
+                _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
+            self.item_force_cpu_gtk.connect("toggled", self._on_force_cpu_toggled_gtk)
+            self.menu.append(self.item_force_cpu_gtk)
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
@@ -1081,18 +1082,18 @@ class DicteeTrayQt:
             _("Enable short-text fix on both normal and translation pipelines."))
         self.action_short_qt.toggled.connect(self._on_short_toggled_qt)
 
-        # Force CPU toggle (applies to all ASR backends; restarts the daemon
-        # so the change takes effect immediately). Tooltip is dynamic — set
-        # in _refresh_menu_toggles_qt with the right one of the 6 cases
-        # (forcing_cpu × VRAM tier).
-        self.action_force_cpu_qt = self.menu.addAction(_("Force CPU (no GPU)"))
-        self.action_force_cpu_qt.setCheckable(True)
-        _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
-        _initial_force = _fc in ("1", "true", "yes")
-        self.action_force_cpu_qt.setChecked(_initial_force)
-        self.action_force_cpu_qt.setToolTip(
-            _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
-        self.action_force_cpu_qt.toggled.connect(self._on_force_cpu_toggled_qt)
+        # Force CPU toggle (only when dictee-cuda is installed — CPU-only build
+        # has no CUDA provider; the toggle would have no effect).
+        _cuda_lib = "/usr/lib/dictee/libonnxruntime_providers_cuda.so"
+        if os.path.isfile(_cuda_lib):
+            self.action_force_cpu_qt = self.menu.addAction(_("Force CPU (no GPU)"))
+            self.action_force_cpu_qt.setCheckable(True)
+            _fc = read_conf_value("DICTEE_FORCE_CPU", "0").lower()
+            _initial_force = _fc in ("1", "true", "yes")
+            self.action_force_cpu_qt.setChecked(_initial_force)
+            self.action_force_cpu_qt.setToolTip(
+                _force_cpu_warning(_initial_force, _detect_gpu_vram_gb()))
+            self.action_force_cpu_qt.toggled.connect(self._on_force_cpu_toggled_qt)
 
         self.menu.addSeparator()
         self.action_cheatsheet = self.menu.addAction(_("Toggle voice commands cheatsheet"))
