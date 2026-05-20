@@ -443,89 +443,41 @@ RowLayout {
             }
         }
 
-        ThemedButton {
-            id: btnDiarize
+        RowLayout {
             Layout.fillWidth: true
             Layout.preferredWidth: 0
+            implicitHeight: btnMeeting.implicitHeight
+            spacing: 0
 
-            enabled: root.sortformerAvailable && (
-                fullRep.state === "idle" ||
-                fullRep.state === "preparing" ||
-                fullRep.state === "diarize-ready" ||
-                (fullRep.state === "recording" && root.activeButton === "diarize")
-            )
-
-            contentItem: RowLayout {
-                spacing: 4
-                Kirigami.Icon {
-                    source: "group"
-                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                }
-                PlasmaComponents.Label {
-                    text: {
-                        switch (fullRep.state) {
-                            case "preparing":     return i18n("Preparing… (click to cancel)")
-                            case "diarize-ready":  return i18n("Start meeting")
-                            case "diarizing":     return i18n("Meeting in progress…")
-                            default:
-                                if (fullRep.state === "recording" && root.activeButton === "diarize")
-                                    return i18n("Stop meeting")
-                                return i18n("Meeting")
-                        }
-                    }
-                    color: {
-                        if (fullRep.state === "diarize-ready") return Kirigami.Theme.positiveTextColor
-                        if (fullRep.state === "recording" && root.activeButton === "diarize") return Kirigami.Theme.negativeTextColor
-                        return Kirigami.Theme.textColor
-                    }
-                }
+            ThemedButton {
+                id: btnMeeting
+                Layout.fillWidth: true
+                text: i18n("Meeting")
+                icon.name: "media-record"
+                enabled: fullRep.state !== "meeting-ui-open" && fullRep.state !== "meeting-recording"
+                onClicked: fullRep.actionRequested("meeting-live")
+                tooltipText: fullRep.state === "meeting-ui-open"
+                    ? i18n("Meeting window is open")
+                    : fullRep.state === "meeting-recording"
+                    ? i18n("Meeting recording in progress")
+                    : i18n("Open live meeting capture (record, then send to diarization)")
             }
 
-            onClicked: {
-                switch (fullRep.state) {
-                    case "idle":
-                        root.activeButton = "diarize"
-                        fullRep.actionRequested("diarize-prepare")
-                        break
-                    case "preparing":
-                        fullRep.actionRequested("cancel")
-                        break
-                    case "diarize-ready":
-                        fullRep.actionRequested("dictate")
-                        break
-                    case "recording":
-                        fullRep.actionRequested("dictate")
-                        break
+            Rectangle {
+                id: meetingDot
+                width: 10; height: 10; radius: 5
+                color: "red"
+                Layout.alignment: Qt.AlignVCenter
+                Layout.rightMargin: 8
+                property bool active: fullRep.state === "meeting-recording"
+                visible: active
+                SequentialAnimation {
+                    running: meetingDot.active
+                    loops: Animation.Infinite
+                    NumberAnimation { target: meetingDot; property: "opacity"; to: 0.2; duration: 600; easing.type: Easing.InOutSine }
+                    NumberAnimation { target: meetingDot; property: "opacity"; to: 1.0; duration: 600; easing.type: Easing.InOutSine }
                 }
             }
-
-            opacity: fullRep.state === "preparing" ? pulseAnim.pulseOpacity : 1.0
-
-            SequentialAnimation {
-                id: pulseAnim
-                property real pulseOpacity: 1.0
-                running: fullRep.state === "preparing"
-                loops: Animation.Infinite
-                NumberAnimation { target: pulseAnim; property: "pulseOpacity"; to: 0.4; duration: 600; easing.type: Easing.InOutSine }
-                NumberAnimation { target: pulseAnim; property: "pulseOpacity"; to: 1.0; duration: 600; easing.type: Easing.InOutSine }
-            }
-
-            QQC2.ToolTip.text: {
-                if (!root.sortformerAvailable)
-                    return i18n("Sortformer model not installed. Configure in dictee-setup.")
-                switch (fullRep.state) {
-                    case "preparing": return i18n("Freeing GPU memory...")
-                    case "diarize-ready": return i18n("Click to start recording with speaker identification")
-                    case "recording": return root.activeButton === "diarize"
-                        ? i18n("Click to stop and identify speakers")
-                        : i18n("Record and identify speakers (max 4)")
-                    default: return i18n("Record and identify speakers (max 4)")
-                }
-            }
-
-            QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.delay: 500
         }
     }
 
@@ -932,13 +884,6 @@ RowLayout {
                 radius: 4
                 visible: !root.dicteeConfigured
             }
-        }
-
-        PlasmaComponents.ToolButton {
-            icon.name: "media-record"
-            display: PlasmaComponents.AbstractButton.IconOnly
-            onClicked: fullRep.actionRequested("meeting-live")
-            PlasmaComponents.ToolTip { text: i18n("Start live meeting transcription") }
         }
 
         PlasmaComponents.ToolButton {

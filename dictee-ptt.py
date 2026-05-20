@@ -670,8 +670,8 @@ def run_evdev(ptt):
                             ui.write_event(event)
                             continue
 
-                        # Meeting live active: forward keys, don't consume
-                        if read_state() == "meeting-recording":
+                        # Meeting live UI active (open or recording): forward keys, don't consume
+                        if read_state() in ("meeting-recording", "meeting-ui-open"):
                             ui.write_event(event)
                             continue
 

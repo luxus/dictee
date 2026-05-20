@@ -455,6 +455,12 @@ class MeetingWindow(QMainWindow):
 
         self._build_ui()
 
+        # Signal to plasmoid/tray that meeting-live UI is open
+        try:
+            Path("/dev/shm/.dictee_state").write_text("meeting-ui-open\n")
+        except OSError:
+            pass
+
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -814,10 +820,11 @@ class MeetingWindow(QMainWindow):
             self._tick_timer.stop()
             if self.audio_worker:
                 self.audio_worker.stop()
-            try:
-                Path("/dev/shm/.dictee_state").write_text("idle\n")
-            except OSError:
-                pass
+        # Reset state on window close (regardless of recording state)
+        try:
+            Path("/dev/shm/.dictee_state").write_text("idle\n")
+        except OSError:
+            pass
         super().closeEvent(event)
 
 

@@ -380,6 +380,8 @@ ICON_MAP = {
     "preparing": "parakeet-diarize",
     "diarize-ready": "parakeet-diarize",
     "switching": "parakeet-active-dark" if _DARK else "parakeet-active",
+    "meeting-ui-open": "parakeet-active-dark" if _DARK else "parakeet-active",
+    "meeting-recording": "parakeet-recording",
 }
 
 
@@ -541,7 +543,6 @@ class DicteeTrayAppIndicator:
         self.state = "offline"
         self._prev_state = None
         self._daemon_active = False
-        self._diarize_was_recording = False
         self._start_retries = 0
 
         # Créer l'indicateur
@@ -636,33 +637,11 @@ class DicteeTrayAppIndicator:
         item_transcribe.connect("activate", lambda _: subprocess.Popen(["dictee-transcribe"]))
         self.menu.append(item_transcribe)
 
-        item_meeting_live = Gtk.MenuItem(label=_("Start live meeting transcription"))
-        item_meeting_live.connect("activate", lambda _: subprocess.Popen(["dictee-meeting-live", "--start"]))
-        self.menu.append(item_meeting_live)
-
-        self.item_diarize_gtk = Gtk.CheckMenuItem(label=_("Meeting"))
-        sortformer_ok = _sortformer_available()
-        self.item_diarize_gtk.set_sensitive(sortformer_ok)
-        if sortformer_ok:
-            self.item_diarize_gtk.set_tooltip_text(
-                _("Meeting mode with speaker identification. "
-                  "Recommended for short recordings (< 5 min)."))
-        else:
-            self.item_diarize_gtk.set_tooltip_text(
-                _("Sortformer model not installed. Configure in dictee-setup."))
-        self.item_diarize_gtk.set_active(
-            read_state() in ("preparing", "diarize-ready"))
-        self.item_diarize_gtk.connect("toggled", self._on_diarize_toggled_gtk)
-        self.menu.append(self.item_diarize_gtk)
-
-        self.item_diarize_lock_gtk = Gtk.CheckMenuItem(label=_("Keep meeting active"))
-        self.item_diarize_lock_gtk.set_sensitive(
-            sortformer_ok and self.item_diarize_gtk.get_active())
-        self.item_diarize_lock_gtk.set_active(False)
-        self.item_diarize_lock_gtk.set_tooltip_text(
-            _("When unchecked, meeting mode is disabled after each recording."))
-        self.item_diarize_lock_gtk.connect("toggled", self._on_diarize_lock_toggled_gtk)
-        self.menu.append(self.item_diarize_lock_gtk)
+        self.item_meeting_gtk = Gtk.MenuItem(label=_("Meeting"))
+        self.item_meeting_gtk.connect("activate", lambda _: subprocess.Popen(["dictee-meeting-live"]))
+        self.item_meeting_gtk.set_sensitive(
+            read_state() not in ("meeting-ui-open", "meeting-recording"))
+        self.menu.append(self.item_meeting_gtk)
 
         # LLM post-processing toggle (above Audio context)
         self.item_llm_gtk = Gtk.CheckMenuItem(label=_("LLM post-processing"))
@@ -806,22 +785,19 @@ class DicteeTrayAppIndicator:
         svc = _conf_asr_service()
         _dbg(f"reset (gtk): svc={svc}")
         subprocess.Popen(["dictee-reset", svc])
-        if self.item_diarize_gtk.get_active():
-            self.item_diarize_gtk.set_active(False)
 
     def _check_daemon(self):
         self._daemon_active = daemon_is_active()
 
     def _check_state(self):
         file_state = read_state()
-        if file_state in ("recording", "transcribing", "diarizing", "preparing", "diarize-ready"):
+        if file_state in ("recording", "transcribing", "diarizing", "preparing", "diarize-ready",
+                          "meeting-ui-open", "meeting-recording"):
             self.state = file_state
         elif file_state in ("idle", "switching"):
             self.state = "idle"
         elif self._daemon_active:
             self.state = "idle"
-        elif self.item_diarize_gtk.get_active():
-            self.state = "diarize"
         else:
             self.state = "offline"
 
@@ -864,26 +840,9 @@ class DicteeTrayAppIndicator:
         self.item_translate.set_visible(not is_busy)
         self.item_cancel.set_visible(is_busy)
 
-        # Diarization requires Sortformer (backend auto-switches to Parakeet)
-        self.item_diarize_gtk.set_sensitive(_sortformer_available() and not is_busy)
-        self.item_diarize_lock_gtk.set_sensitive(
-            _sortformer_available() and not is_busy and self.item_diarize_gtk.get_active())
-        if not _sortformer_available():
-            self.item_diarize_gtk.set_tooltip_text(
-                _("Sortformer model not installed. Configure in dictee-setup."))
-        else:
-            self.item_diarize_gtk.set_tooltip_text(
-                _("Speaker identification (max 4). Switches to Parakeet automatically."))
-
-        # Auto-uncheck diarization after recording (unless locked)
-        if self.state == "recording" and self.item_diarize_gtk.get_active():
-            self._diarize_was_recording = True
-        if (self._diarize_was_recording
-                and self.state in ("idle", "offline", "diarize")
-                and self.item_diarize_gtk.get_active()
-                and not self.item_diarize_lock_gtk.get_active()):
-            self.item_diarize_gtk.set_active(False)
-            self._diarize_was_recording = False
+        # Meeting item: disabled while UI is open or recording
+        self.item_meeting_gtk.set_sensitive(
+            self.state not in ("meeting-ui-open", "meeting-recording"))
 
         self._prev_state = self.state
 
@@ -916,18 +875,6 @@ class DicteeTrayAppIndicator:
     def _on_trans_toggled(self, item, key):
         if item.get_active():
             subprocess.Popen(["dictee-switch-backend", "translate", key])
-
-    def _on_diarize_toggled_gtk(self, item):
-        active = item.get_active()
-        val = "true" if active else "false"
-        subprocess.Popen(["dictee-switch-backend", "diarize", val])
-        self.item_diarize_lock_gtk.set_sensitive(active)
-        if not active:
-            self.item_diarize_lock_gtk.set_active(False)
-
-    def _on_diarize_lock_toggled_gtk(self, item):
-        if item.get_active() and not self.item_diarize_gtk.get_active():
-            self.item_diarize_gtk.set_active(True)
 
     def _on_context_toggled_gtk(self, item):
         val = "true" if item.get_active() else "false"
@@ -1014,7 +961,6 @@ class DicteeTrayQt:
         self.state = "offline"
         self._prev_state = None
         self._daemon_active = False
-        self._diarize_was_recording = False
         self._start_retries = 0
 
         # Charger les icônes
@@ -1101,31 +1047,11 @@ class DicteeTrayQt:
         self.menu.addSeparator()
 
         self.action_transcribe = self.menu.addAction(_("Transcribe a file..."))
-        self.action_meeting_live = self.menu.addAction(_("Start live meeting transcription"))
-
-        self.action_diarize_qt = self.menu.addAction(_("Meeting"))
-        self.action_diarize_qt.setCheckable(True)
-        sortformer_ok = _sortformer_available()
-        self.action_diarize_qt.setEnabled(sortformer_ok)
-        if sortformer_ok:
-            self.action_diarize_qt.setToolTip(
-                _("Meeting mode with speaker identification. "
-                  "Recommended for short recordings (< 5 min)."))
-        else:
-            self.action_diarize_qt.setToolTip(
-                _("Sortformer model not installed. Configure in dictee-setup."))
-        self.action_diarize_qt.setChecked(
-            read_state() in ("preparing", "diarize-ready"))
-        self.action_diarize_qt.toggled.connect(self._on_diarize_toggled_qt)
-
-        self.action_diarize_lock_qt = self.menu.addAction(_("Keep meeting active"))
-        self.action_diarize_lock_qt.setCheckable(True)
-        self.action_diarize_lock_qt.setEnabled(
-            sortformer_ok and self.action_diarize_qt.isChecked())
-        self.action_diarize_lock_qt.setChecked(False)
-        self.action_diarize_lock_qt.setToolTip(
-            _("When unchecked, meeting mode is disabled after each recording."))
-        self.action_diarize_lock_qt.toggled.connect(self._on_diarize_lock_toggled_qt)
+        self.action_meeting_qt = self.menu.addAction(_("Meeting"))
+        self.action_meeting_qt.setEnabled(
+            read_state() not in ("meeting-ui-open", "meeting-recording"))
+        self.action_meeting_qt.setToolTip(
+            _("Open live meeting capture (record, then send to diarization)"))
 
         # LLM post-processing toggle (above Audio context)
         self.action_llm_qt = self.menu.addAction(_("LLM post-processing"))
@@ -1210,8 +1136,8 @@ class DicteeTrayQt:
                 self.QTimer.singleShot(1000, self._delayed_refresh)
         elif action == self.action_transcribe:
             subprocess.Popen(["dictee-transcribe"])
-        elif action == self.action_meeting_live:
-            subprocess.Popen(["dictee-meeting-live", "--start"])
+        elif action == self.action_meeting_qt:
+            subprocess.Popen(["dictee-meeting-live"])
         elif action == self.action_cheatsheet:
             subprocess.Popen(["dictee-cheatsheet", "--toggle"])
         elif action == self.action_setup:
@@ -1248,17 +1174,6 @@ class DicteeTrayQt:
     def _on_trans_selected(self, action):
         key = action.data()
         subprocess.Popen(["dictee-switch-backend", "translate", key])
-
-    def _on_diarize_toggled_qt(self, checked):
-        val = "true" if checked else "false"
-        subprocess.Popen(["dictee-switch-backend", "diarize", val])
-        self.action_diarize_lock_qt.setEnabled(checked)
-        if not checked:
-            self.action_diarize_lock_qt.setChecked(False)
-
-    def _on_diarize_lock_toggled_qt(self, checked):
-        if checked and not self.action_diarize_qt.isChecked():
-            self.action_diarize_qt.setChecked(True)
 
     def _on_context_toggled_qt(self, checked):
         val = "true" if checked else "false"
@@ -1353,22 +1268,19 @@ class DicteeTrayQt:
         svc = _conf_asr_service()
         _dbg(f"reset (qt): svc={svc}")
         subprocess.Popen(["dictee-reset", svc])
-        if self.action_diarize_qt.isChecked():
-            self.action_diarize_qt.setChecked(False)
 
     def _check_daemon(self):
         self._daemon_active = daemon_is_active()
 
     def _check_state(self):
         file_state = read_state()
-        if file_state in ("recording", "transcribing", "diarizing", "preparing", "diarize-ready"):
+        if file_state in ("recording", "transcribing", "diarizing", "preparing", "diarize-ready",
+                          "meeting-ui-open", "meeting-recording"):
             self.state = file_state
         elif file_state in ("idle", "switching"):
             self.state = "idle"
         elif self._daemon_active:
             self.state = "idle"
-        elif self.action_diarize_qt.isChecked():
-            self.state = "diarize"
         else:
             self.state = "offline"
 
@@ -1428,26 +1340,9 @@ class DicteeTrayQt:
         self.action_translate.setVisible(not is_busy)
         self.action_cancel.setVisible(is_busy)
 
-        # Diarization requires Sortformer (backend auto-switches to Parakeet)
-        self.action_diarize_qt.setEnabled(_sortformer_available() and not is_busy)
-        self.action_diarize_lock_qt.setEnabled(
-            _sortformer_available() and not is_busy and self.action_diarize_qt.isChecked())
-        if not _sortformer_available():
-            self.action_diarize_qt.setToolTip(
-                _("Sortformer model not installed. Configure in dictee-setup."))
-        else:
-            self.action_diarize_qt.setToolTip(
-                _("Speaker identification (max 4). Switches to Parakeet automatically."))
-
-        # Auto-uncheck diarization after recording (unless locked)
-        if self.state == "recording" and self.action_diarize_qt.isChecked():
-            self._diarize_was_recording = True
-        if (self._diarize_was_recording
-                and self.state in ("idle", "offline", "diarize")
-                and self.action_diarize_qt.isChecked()
-                and not self.action_diarize_lock_qt.isChecked()):
-            self.action_diarize_qt.setChecked(False)
-            self._diarize_was_recording = False
+        # Meeting item: disabled while UI is open or recording
+        self.action_meeting_qt.setEnabled(
+            self.state not in ("meeting-ui-open", "meeting-recording"))
 
         self._prev_state = self.state
 
