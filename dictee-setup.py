@@ -6319,6 +6319,8 @@ class DicteeSetupDialog(QDialog):
 
         lay_ctx = QHBoxLayout()
         lay_ctx.setSpacing(8)
+        # Indent to align with the switch label text (ToggleSwitch track = 44 px + 8 px spacing)
+        lay_ctx.setContentsMargins(ToggleSwitch._TRACK_W + ToggleSwitch._TEXT_SPACING, 0, 0, 0)
         self.lbl_audio_context = QLabel(_("Context duration:"))
         self.lbl_audio_context.setToolTip(_tt(_("Maximum duration of accumulated audio context. Also the inactivity timeout: the buffer expires after this many seconds without a non-empty dictation.")))
         self.spin_audio_context_timeout = QSpinBox()
