@@ -443,19 +443,19 @@ RowLayout {
             }
         }
 
-        RowLayout {
+        Item {
             Layout.fillWidth: true
             Layout.preferredWidth: 0
             implicitHeight: btnMeeting.implicitHeight
-            spacing: 0
 
             ThemedButton {
                 id: btnMeeting
-                Layout.fillWidth: true
+                anchors.fill: parent
                 text: i18n("Meeting")
                 icon.name: "meeting-attending"
                 enabled: fullRep.state !== "meeting-ui-open" && fullRep.state !== "meeting-recording"
                 onClicked: fullRep.actionRequested("meeting-live")
+                leftPadding: meetingDot.visible ? 20 : undefined
                 tooltipText: fullRep.state === "meeting-ui-open"
                     ? i18n("Meeting window is open")
                     : fullRep.state === "meeting-recording"
@@ -465,18 +465,23 @@ RowLayout {
 
             Rectangle {
                 id: meetingDot
-                width: 10; height: 10; radius: 5
-                color: "red"
-                Layout.alignment: Qt.AlignVCenter
-                Layout.rightMargin: 8
                 property bool active: fullRep.state === "meeting-recording"
                 visible: active
-                SequentialAnimation {
-                    running: meetingDot.active
-                    loops: Animation.Infinite
-                    NumberAnimation { target: meetingDot; property: "opacity"; to: 0.2; duration: 600; easing.type: Easing.InOutSine }
-                    NumberAnimation { target: meetingDot; property: "opacity"; to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+                width: 10; height: 10; radius: 5
+                color: "#ff0000"
+                z: 100
+                anchors.verticalCenter: parent.verticalCenter
+                x: 6
+                onActiveChanged: {
+                    if (active) { meetingDotAnim.start() }
+                    else { meetingDotAnim.stop(); opacity = 1.0 }
                 }
+            }
+            SequentialAnimation {
+                id: meetingDotAnim
+                loops: Animation.Infinite
+                NumberAnimation { target: meetingDot; property: "opacity"; to: 0.2; duration: 600; easing.type: Easing.InOutSine }
+                NumberAnimation { target: meetingDot; property: "opacity"; to: 1.0; duration: 600; easing.type: Easing.InOutSine }
             }
         }
     }
