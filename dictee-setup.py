@@ -9009,17 +9009,22 @@ class DicteeSetupDialog(QDialog):
         # Tooltip user-friendly : explique le compromis précision/vitesse
         # sans jargon (pas de "beam_size", "tier", etc. — c'est dans les
         # labels du combobox pour les utilisateurs avancés).
-        # Single-line obligatoire (cf. feedback-tooltips-single-line.md) —
-        # Qt fait le word-wrap automatique avec le helper _tt() (width 400px).
+        # \n autorisés ici pour structurer les bullets — le helper _tt()
+        # utilise white-space:pre-wrap qui les respecte. La règle
+        # "single-line" du memory vise les \n parasites au milieu d'une
+        # phrase, pas la structure logique en sections.
         self.cmb_whisper_hw_tier.setToolTip(_tt(_(
-            "Adjusts Whisper's accuracy vs speed trade-off based on your "
-            "hardware. Auto (recommended) detects your CPU, RAM and GPU "
-            "and picks the best profile. Ultra and High give more accurate "
-            "transcription but are slower (GPU or strong CPU needed). "
-            "Medium and Low run faster on smaller machines with slightly "
-            "less accuracy. Override Auto only when needed (e.g. force "
-            "Low to save battery, or High on a shared machine where Auto "
-            "under-counts your hardware).")))
+            "Adjusts Whisper's accuracy vs speed trade-off based on "
+            "your hardware.\n\n"
+            "• Auto (recommended): detects your CPU, RAM and GPU and "
+            "picks the best profile.\n"
+            "• Ultra / High: more accurate, slower (GPU or strong "
+            "CPU needed).\n"
+            "• Medium / Low: faster, lower accuracy (small or older "
+            "machines).\n\n"
+            "Override Auto only when needed — e.g. force Low to save "
+            "battery, or High on a shared machine where Auto "
+            "under-counts your hardware.")))
         self._lbl_hw_tier_detected = QLabel(
             _("Detected: {tier} — {cores} cores, {ram} GB RAM, {vram} GB VRAM").format(
                 tier=_detected_tier, cores=_cores, ram=_ram_gb, vram=_vram_gb))
