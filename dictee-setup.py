@@ -7196,16 +7196,46 @@ class DicteeSetupDialog(QDialog):
             return "vosk"
         return "parakeet"
 
-    def _detect_hw_tier(self, ram_gb, vram_gb):
-        """Whisper performance tier (mirror of transcribe-daemon-whisper)."""
+    def _detect_hw_tier(self):
+        """Mirror EXACT de transcribe-daemon-whisper._detect_hw_tier.
+
+        Returns (tier, cores, ram_gb, vram_gb) — entiers cohérents avec
+        le daemon. NE PAS factoriser via _get_system_info() qui arrondit
+        en float (round) : divergence visible dès qu'une mesure tombe
+        sur une frontière de tier — ex. RTX 4070 Laptop 8188 MiB donne
+        daemon=7 (//) mais round=8.0, l'UI afficherait 'ultra' alors
+        que le daemon utilise 'high'.
+        """
         cores = os.cpu_count() or 4
+        ram_gb = 8  # fallback
+        try:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        ram_gb = int(line.split()[1]) // (1024 * 1024)
+                        break
+        except OSError:
+            pass
+        vram_gb = 0
+        try:
+            out = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=memory.total",
+                 "--format=csv,noheader,nounits"],
+                timeout=2, text=True,
+            )
+            vram_gb = int(out.strip().split("\n")[0]) // 1024
+        except (FileNotFoundError, subprocess.TimeoutExpired,
+                subprocess.CalledProcessError, ValueError):
+            pass
         if vram_gb >= 8 and ram_gb >= 16 and cores >= 8:
-            return "ultra"
-        if vram_gb >= 4 and ram_gb >= 8:
-            return "high"
-        if cores >= 8 and ram_gb >= 16:
-            return "medium"
-        return "low"
+            tier = "ultra"
+        elif vram_gb >= 4 and ram_gb >= 8:
+            tier = "high"
+        elif cores >= 8 and ram_gb >= 16:
+            tier = "medium"
+        else:
+            tier = "low"
+        return tier, cores, ram_gb, vram_gb
 
     def _build_wizard_page1(self, conf):
         page = QWidget()
@@ -8959,12 +8989,7 @@ class DicteeSetupDialog(QDialog):
         # Row 3: Performance profile (HardwareProfile pattern, 2026-05-21)
         # Tier maps to beam_size: ultra=5, high=3, medium=2, low=1. Auto =
         # detected from cores + RAM + VRAM at daemon startup.
-        # NB: ne pas destructurer en `_` ici — `_` est la fonction gettext
-        # utilisée plus haut dans la fonction. Python rendrait `_` local
-        # à toute la fonction → UnboundLocalError sur tous les _("...").
-        _ram_gb, _gpu_name, _vram_gb, _gpu_free = self._get_system_info()
-        _detected_tier = self._detect_hw_tier(_ram_gb, _vram_gb)
-        _cores = os.cpu_count() or 4
+        _detected_tier, _cores, _ram_gb, _vram_gb = self._detect_hw_tier()
         lbl_hw_tier = QLabel(_("Performance profile:"))
         self.cmb_whisper_hw_tier = QComboBox()
         self.cmb_whisper_hw_tier.setFixedWidth(150)
@@ -8981,10 +9006,28 @@ class DicteeSetupDialog(QDialog):
         _idx = self.cmb_whisper_hw_tier.findData(_cur_tier)
         self.cmb_whisper_hw_tier.setCurrentIndex(_idx if _idx >= 0 else 0)
         self.cmb_whisper_hw_tier.currentIndexChanged.connect(self._mark_dirty)
+        # Tooltip user-friendly : explique le compromis précision/vitesse
+        # sans jargon (pas de "beam_size", "tier", etc. — c'est dans les
+        # labels du combobox pour les utilisateurs avancés).
+        self.cmb_whisper_hw_tier.setToolTip(_tt(_(
+            "Adjusts Whisper's accuracy vs speed trade-off based on your "
+            "hardware.\n\n"
+            "• Auto (recommended): detects your CPU, RAM and GPU and picks "
+            "the best setting.\n"
+            "• Ultra/High: more accurate, slower (requires GPU or strong "
+            "CPU).\n"
+            "• Medium/Low: faster, lower accuracy (small or older machines).\n\n"
+            "Override only if Auto picks a profile that doesn't fit your "
+            "use (e.g. force Low to save battery, or High on a shared "
+            "machine where Auto undercounts your hardware).")))
         self._lbl_hw_tier_detected = QLabel(
             _("Detected: {tier} — {cores} cores, {ram} GB RAM, {vram} GB VRAM").format(
-                tier=_detected_tier, cores=_cores, ram=int(_ram_gb), vram=int(_vram_gb)))
+                tier=_detected_tier, cores=_cores, ram=_ram_gb, vram=_vram_gb))
         self._lbl_hw_tier_detected.setStyleSheet("color: gray;")
+        self._lbl_hw_tier_detected.setToolTip(_tt(_(
+            "Hardware automatically detected. Auto mode picks the profile "
+            "shown here. Selecting a different profile in the combo "
+            "overrides this detection.")))
         row_hw = QHBoxLayout()
         row_hw.setContentsMargins(24, 0, 0, 0)
         row_hw.addWidget(lbl_hw_tier)
