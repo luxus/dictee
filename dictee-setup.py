@@ -354,13 +354,25 @@ def _sanitize_conf_value(val):
     return re.sub(r'[\n\r`$"\'\\;|&<>{}!() \t]', '', str(val))
 
 
+def _sanitize_extra_devices(val):
+    """Sanitize DICTEE_PTT_EXTRA_DEVICES (quoted in dictee.conf).
+
+    Device names contain spaces (e.g. 'LogiOps Virtual Input'), so we
+    can't strip them like _sanitize_conf_value does. Keep only chars
+    that can appear in a real device name; the value is wrapped in
+    double quotes when written, so spaces survive bash sourcing.
+    """
+    return re.sub(r'[^A-Za-z0-9 ,\-_.]', '', str(val))
+
+
 def save_config(backend, lang_source, lang_target, clipboard=True,
                 anim_speech=True, anim_plasmoid=False,
                 ollama_model="translategemma", ollama_cpu=False, trans_engine="google",
                 lt_port=5000, lt_langs="", asr_backend="parakeet", whisper_model="small",
                 whisper_lang="", vosk_model="fr", audio_source="",
                 ptt_mode="toggle", ptt_key=67, ptt_key_translate=0,
-                ptt_mod_translate="", postprocess=True, pp_translate=True,
+                ptt_mod_translate="", ptt_extra_devices="",
+                postprocess=True, pp_translate=True,
                 pp_elisions=True, pp_elisions_it=True,
                 pp_spanish=True, pp_portuguese=True, pp_german=True,
                 pp_dutch=True, pp_romanian=True,
@@ -449,6 +461,10 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
         values["DICTEE_PTT_KEY_TRANSLATE"] = str(ptt_key_translate)
     if ptt_mod_translate:
         values["DICTEE_PTT_MOD_TRANSLATE"] = _s(ptt_mod_translate)
+    # Always write (even if empty) so the UI can clear the value by saving
+    # an empty string — otherwise the previous list would remain forever.
+    # Quoted because device names contain spaces (e.g. "LogiOps Virtual Input").
+    values["DICTEE_PTT_EXTRA_DEVICES"] = f'"{_sanitize_extra_devices(ptt_extra_devices or "")}"'
     # Translation backend-specific
     if backend == "trans":
         values["DICTEE_TRANS_ENGINE"] = trans_engine
@@ -8230,6 +8246,42 @@ class DicteeSetupDialog(QDialog):
             row_input.addStretch()
             lay_sc.addLayout(row_input)
 
+        # Extra input devices (advanced) — for mouse buttons or keys remapped
+        # via logiops, keyd, kanata, xremap, input-remapper, etc. These tools
+        # create virtual keyboards that dictee-ptt filters out by default to
+        # avoid feedback loops; this field whitelists them by name substring.
+        lay_sc.addSpacing(8)
+        lbl_extra = QLabel(_("Extra input devices") + " :")
+        lay_sc.addWidget(lbl_extra)
+
+        row_extra = QHBoxLayout()
+        self.txt_ptt_extra_devices = QLineEdit()
+        self.txt_ptt_extra_devices.setPlaceholderText(
+            _("e.g. LogiOps Virtual Input, keyd virtual keyboard"))
+        self.txt_ptt_extra_devices.setText(
+            self.conf.get("DICTEE_PTT_EXTRA_DEVICES", ""))
+        self.txt_ptt_extra_devices.setToolTip(_tt(_(
+            "Comma-separated names (case-insensitive, substring match). "
+            "Use this if you trigger dictation via a mouse button or key "
+            "remapped through tools like logiops, keyd, kanata, xremap or "
+            "input-remapper. Most users leave this empty.")))
+        row_extra.addWidget(self.txt_ptt_extra_devices, 1)
+
+        btn_detect_devices = QPushButton(_("Detect…"))
+        btn_detect_devices.setToolTip(_tt(_(
+            "Scan input devices and pick virtual keyboards to whitelist")))
+        btn_detect_devices.setFixedWidth(120)
+        btn_detect_devices.clicked.connect(self._on_detect_extra_devices)
+        row_extra.addWidget(btn_detect_devices)
+        lay_sc.addLayout(row_extra)
+
+        lbl_extra_help = QLabel(_(
+            "For mouse buttons or keys remapped via logiops, keyd, etc. "
+            "Most users don't need this."))
+        lbl_extra_help.setWordWrap(True)
+        lbl_extra_help.setStyleSheet("color: #888; font-size: 11px;")
+        lay_sc.addWidget(lbl_extra_help)
+
         # Voice commands cheatsheet — handled directly by dictee-ptt.
         # The "Same key + Mod" modes route Mod+PTT to dictee-cheatsheet
         # --toggle through dictee-ptt (same path as Alt+key for translate),
@@ -15733,6 +15785,81 @@ class DicteeSetupDialog(QDialog):
             self.btn_capture_translate.setText(
                 _("Key '{key}' not supported").format(key=key_str))
 
+    def _on_detect_extra_devices(self):
+        """Dialog listing input devices; user checks virtual keyboards to whitelist."""
+        try:
+            with open("/proc/bus/input/devices") as f:
+                content = f.read()
+        except OSError as e:
+            QMessageBox.warning(self, _("Error"), str(e))
+            return
+
+        # Patterns rejected by default in dictee-ptt.find_keyboards_*
+        # (kept in sync — feedback loop protection).
+        FILTER_PAT = re.compile(r"virtual|uinput", re.IGNORECASE)
+        ALWAYS_BLOCKED = re.compile(r"dotool|dictee-ptt", re.IGNORECASE)
+
+        devices = []  # (name, status) where status in {'whitelistable', 'physical', 'blocked'}
+        for block in content.split("\n\n"):
+            name = handlers = ""
+            for line in block.strip().splitlines():
+                if line.startswith("N: Name="):
+                    name = line[8:].strip().strip('"')
+                elif line.startswith("H: Handlers="):
+                    handlers = line[12:].strip()
+            if not name or "kbd" not in handlers:
+                continue
+            if ALWAYS_BLOCKED.search(name):
+                devices.append((name, "blocked"))
+            elif FILTER_PAT.search(name):
+                devices.append((name, "whitelistable"))
+            else:
+                devices.append((name, "physical"))
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(_("Detect input devices"))
+        dlg.setMinimumSize(580, 400)
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(QLabel(_(
+            "Keyboards detected on your system. Check the virtual ones you "
+            "want dictee to listen to (e.g. devices created by logiops, keyd, "
+            "kanata, xremap or input-remapper).")))
+
+        list_widget = QListWidget()
+        current = {s.strip() for s in self.txt_ptt_extra_devices.text().split(",") if s.strip()}
+        for name, status in devices:
+            if status == "whitelistable":
+                label = name
+            elif status == "physical":
+                label = _("{name}  [physical — listened by default]").format(name=name)
+            else:  # blocked
+                label = _("{name}  [internal — always blocked]").format(name=name)
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            checked = name in current
+            item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+            if status != "whitelistable":
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+            list_widget.addItem(item)
+        layout.addWidget(list_widget)
+
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        layout.addWidget(btn_box)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            selected = []
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                if (item.checkState() == Qt.CheckState.Checked
+                        and item.flags() & Qt.ItemFlag.ItemIsEnabled):
+                    selected.append(item.data(Qt.ItemDataRole.UserRole))
+            self.txt_ptt_extra_devices.setText(",".join(selected))
+            self._dirty = True
+
     def _check_ptt_warning(self, code, lbl):
         """Avertit si la touche risque de poser problème."""
         # Touches dangereuses : lettres, chiffres, espace, enter, tab
@@ -18002,6 +18129,7 @@ class DicteeSetupDialog(QDialog):
                         if _pk in ("DICTEE_PTT_MODE", "DICTEE_PTT_KEY",
                                    "DICTEE_PTT_KEY_TRANSLATE",
                                    "DICTEE_PTT_MOD_TRANSLATE",
+                                   "DICTEE_PTT_EXTRA_DEVICES",
                                    "DICTEE_CHEATSHEET_MOD"):
                             _old_ptt[_pk] = _pv
                         elif _pk in _ASR_KEYS:
@@ -18084,6 +18212,8 @@ class DicteeSetupDialog(QDialog):
         ptt_mode = self.cmb_ptt_mode.currentData() if hasattr(self, 'cmb_ptt_mode') else "toggle"
         ptt_key = getattr(self, '_ptt_key', 67)
         ptt_mod_translate = ""
+        ptt_extra_devices = (self.txt_ptt_extra_devices.text().strip()
+                             if hasattr(self, 'txt_ptt_extra_devices') else "")
 
         translate_mode = self.cmb_translate_mode.currentData() if hasattr(self, 'cmb_translate_mode') else "disabled"
         if translate_mode == "same_alt":
@@ -18189,6 +18319,7 @@ class DicteeSetupDialog(QDialog):
                     ptt_mode=ptt_mode, ptt_key=ptt_key,
                     ptt_key_translate=ptt_key_translate,
                     ptt_mod_translate=ptt_mod_translate,
+                    ptt_extra_devices=ptt_extra_devices,
                     cheatsheet_mod=cheatsheet_mode,
                     cheatsheet_key_seq=cheatsheet_seq_str,
                     postprocess=postprocess,
@@ -18331,6 +18462,7 @@ class DicteeSetupDialog(QDialog):
             "DICTEE_PTT_KEY": str(ptt_key),
             "DICTEE_PTT_KEY_TRANSLATE": str(ptt_key_translate) if ptt_key_translate else "",
             "DICTEE_PTT_MOD_TRANSLATE": ptt_mod_translate or "",
+            "DICTEE_PTT_EXTRA_DEVICES": ptt_extra_devices or "",
             # dictee-ptt now also handles the cheatsheet shortcut (Mod+key →
             # toggle dictee-cheatsheet). Changing DICTEE_CHEATSHEET_MOD must
             # therefore restart the daemon so it picks up the new modifier.
@@ -18341,6 +18473,7 @@ class DicteeSetupDialog(QDialog):
             "DICTEE_PTT_KEY": _old_ptt.get("DICTEE_PTT_KEY", "67"),
             "DICTEE_PTT_KEY_TRANSLATE": _old_ptt.get("DICTEE_PTT_KEY_TRANSLATE", ""),
             "DICTEE_PTT_MOD_TRANSLATE": _old_ptt.get("DICTEE_PTT_MOD_TRANSLATE", ""),
+            "DICTEE_PTT_EXTRA_DEVICES": _old_ptt.get("DICTEE_PTT_EXTRA_DEVICES", ""),
             "DICTEE_CHEATSHEET_MOD": _old_ptt.get("DICTEE_CHEATSHEET_MOD", ""),
         }
         _ptt_changed = _new_ptt != _old_ptt_normalized
