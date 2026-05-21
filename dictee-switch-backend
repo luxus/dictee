@@ -326,6 +326,16 @@ quant)
     esac
     set_conf "DICTEE_PARAKEET_QUANT" "$val"
     _dbg "quant: $val"
+    # Align DICTEE_FORCE_CPU avec la nouvelle contrainte du quant :
+    # - int8 force CPU (GPU 5× plus lent) → DICTEE_FORCE_CPU=1
+    # - fp32 libère la contrainte → DICTEE_FORCE_CPU=0 (GPU par défaut)
+    # Sans cette synchro, passer de int8 (force_cpu=1 hérité) à fp32 laisse
+    # le daemon en CPU malgré le quant qui veut le GPU. Bug signalé 2026-05-21.
+    if [ "$val" = "int8" ]; then
+        set_conf "DICTEE_FORCE_CPU" "1"
+    else
+        set_conf "DICTEE_FORCE_CPU" "0"
+    fi
     # Restart the Parakeet daemon if it's the active backend, so the new
     # model variant is actually loaded (env var alone isn't enough — the
     # daemon reads it only at startup).
