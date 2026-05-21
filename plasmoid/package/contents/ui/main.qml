@@ -177,7 +177,11 @@ PlasmoidItem {
                     // Auto-reset DICTEE_FORCE_CPU if the constraint forces a position
                     // and the conf disagrees — but never while the daemon is busy.
                     var _idleStates = ["idle", "offline"]
-                    if (!root.forceCpuSensitive && _idleStates.indexOf(root.state) !== -1) {
+                    // gpuVramGbReady : empêche l'auto-reset tant que nvidia-smi
+                    // n'a pas répondu (sinon hasGpu=false par défaut → décide
+                    // faussement "pas de GPU" → force CPU au boot du plasmoid).
+                    if (!root.forceCpuSensitive && _idleStates.indexOf(root.state) !== -1
+                            && root.gpuVramGbReady) {
                         var _wantCpu = (root.forceCpuForcedPosition === "cpu")
                         var _currentCpu = (fc === "1" || fc === "true" || fc === "yes")
                         if (_wantCpu !== _currentCpu) {
@@ -195,6 +199,9 @@ PlasmoidItem {
                     var mb = parseInt(raw, 10)
                     root.gpuVramGb = isNaN(mb) ? 0.0 : Math.round(mb / 1024 * 10) / 10
                 }
+                // Flag pour le bloc d'auto-reset DICTEE_FORCE_CPU plus haut :
+                // tant qu'on n'a pas vraiment lu nvidia-smi, on ne décide rien.
+                root.gpuVramGbReady = true
             } else if (source.indexOf("dictee-translate-langs") !== -1) {
                 var langs = stdout.trim()
                 var newList = langs.length > 0 ? langs.split(",") : []
@@ -382,6 +389,11 @@ PlasmoidItem {
     // right one of the 6 warning cases (same logic as dictee-setup.py
     // _refresh_force_cpu_warning and dictee-tray.py _force_cpu_warning).
     property real gpuVramGb: 0.0
+    // Flag : true dès que readGpuVramCmd a répondu. Empêche le code
+    // d'auto-reset DICTEE_FORCE_CPU de décider "pas de GPU" pendant la
+    // fenêtre où la conf est déjà lue mais nvidia-smi pas encore — sinon
+    // restart silencieux du daemon en CPU à chaque démarrage du plasmoid.
+    property bool gpuVramGbReady: false
 
     // Compute Force CPU switch constraint from current backend + quant + GPU state.
     // Returns { sensitive: bool, forced: "cpu"|"gpu"|null, tooltip: string|null }.
