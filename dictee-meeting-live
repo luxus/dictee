@@ -118,12 +118,16 @@ class AudioCaptureWorker(QThread):
 
 
 class ChunkerWorker(QThread):
-    """Splits the growing audio.wav into chunks with overlap via ffmpeg.
+    """Splits the growing audio.wav into chunks with overlap via sox.
 
     Emits `chunk_ready(int chunk_id, str path)` once each chunk is extracted.
     Strategy: poll every 1 s; once duration >= start_t + chunk_duration,
     extract [start_t, start_t+chunk_duration] into chunk_NNN.wav and advance
     start_t by (chunk_duration - overlap).
+
+    sox is ~10× faster than ffmpeg for pure WAV→WAV trim (no container demux,
+    no redundant resample). Source is already 16 kHz mono PCM s16le, so we
+    only need `trim`.
     """
 
     chunk_ready = pyqtSignal(int, str)
@@ -153,7 +157,7 @@ class ChunkerWorker(QThread):
                     self.chunk_id += 1
                     start_t += self.advance
                 else:
-                    self.error.emit(f"ffmpeg extract failed (chunk {self.chunk_id})")
+                    self.error.emit(f"sox extract failed (chunk {self.chunk_id})")
                     return
             time.sleep(1)
 
@@ -167,13 +171,8 @@ class ChunkerWorker(QThread):
 
     def _extract(self, start_s: int, dur_s: int, out_path: Path) -> int:
         cmd = [
-            "ffmpeg", "-y",
-            "-ss", str(start_s),
-            "-t", str(dur_s),
-            "-i", str(self.audio_wav),
-            "-ar", "16000", "-ac", "1",
-            "-c:a", "pcm_s16le",
-            str(out_path),
+            "sox", str(self.audio_wav), str(out_path),
+            "trim", str(start_s), str(dur_s),
         ]
         proc = subprocess.run(
             cmd,
