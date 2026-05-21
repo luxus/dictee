@@ -103,6 +103,30 @@ asr)
 
     set_conf "DICTEE_ASR_BACKEND" "$2"
 
+    # Aligner DICTEE_FORCE_CPU avec la contrainte du nouveau backend, AVANT
+    # le restart du service. Sans ça, le daemon démarre avec l'ancien
+    # FORCE_CPU (héritage du backend précédent), charge le GPU pour rien,
+    # puis le plasmoid détecte l'incohérence et redémarre — d'où charge/
+    # décharge VRAM transitoire observée 2026-05-21 (whisper GPU →
+    # parakeet rapide). Cf. fix wrapper quant.
+    set +eu; source "$CONF"; set -eu
+    case "$2" in
+        parakeet)
+            # Parakeet int8 force CPU, fp32 libère la contrainte
+            if [ "${DICTEE_PARAKEET_QUANT:-fp32}" = "int8" ]; then
+                set_conf "DICTEE_FORCE_CPU" "1"
+            else
+                set_conf "DICTEE_FORCE_CPU" "0"
+            fi
+            ;;
+        canary)
+            # Canary requires GPU (encoder too heavy for CPU)
+            set_conf "DICTEE_FORCE_CPU" "0"
+            ;;
+        # vosk : CPU only by design, FORCE_CPU sans effet — ne pas toucher
+        # whisper : libre, ne pas toucher
+    esac
+
     write_state "switching"
     _dbg "asr: switching to $2 (svc=$svc)"
 
