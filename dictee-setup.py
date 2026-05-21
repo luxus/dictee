@@ -9009,17 +9009,17 @@ class DicteeSetupDialog(QDialog):
         # Tooltip user-friendly : explique le compromis précision/vitesse
         # sans jargon (pas de "beam_size", "tier", etc. — c'est dans les
         # labels du combobox pour les utilisateurs avancés).
+        # Single-line obligatoire (cf. feedback-tooltips-single-line.md) —
+        # Qt fait le word-wrap automatique avec le helper _tt() (width 400px).
         self.cmb_whisper_hw_tier.setToolTip(_tt(_(
             "Adjusts Whisper's accuracy vs speed trade-off based on your "
-            "hardware.\n\n"
-            "• Auto (recommended): detects your CPU, RAM and GPU and picks "
-            "the best setting.\n"
-            "• Ultra/High: more accurate, slower (requires GPU or strong "
-            "CPU).\n"
-            "• Medium/Low: faster, lower accuracy (small or older machines).\n\n"
-            "Override only if Auto picks a profile that doesn't fit your "
-            "use (e.g. force Low to save battery, or High on a shared "
-            "machine where Auto undercounts your hardware).")))
+            "hardware. Auto (recommended) detects your CPU, RAM and GPU "
+            "and picks the best profile. Ultra and High give more accurate "
+            "transcription but are slower (GPU or strong CPU needed). "
+            "Medium and Low run faster on smaller machines with slightly "
+            "less accuracy. Override Auto only when needed (e.g. force "
+            "Low to save battery, or High on a shared machine where Auto "
+            "under-counts your hardware).")))
         self._lbl_hw_tier_detected = QLabel(
             _("Detected: {tier} — {cores} cores, {ram} GB RAM, {vram} GB VRAM").format(
                 tier=_detected_tier, cores=_cores, ram=_ram_gb, vram=_vram_gb))
