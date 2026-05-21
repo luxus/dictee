@@ -117,6 +117,28 @@ def main():
         file=sys.stderr,
     )
     model = WhisperModel(model_size, device=device, compute_type=compute_type)
+
+    # — Écrit le provider effectif dans /dev/shm/.dictee_provider —
+    # Consommé par plasmoid (badge), tray (menu), dictee-setup (status).
+    # Valeurs : cuda / cpu / cpu-forced / cpu-only (cf daemon Rust).
+    # faster-whisper/CT2 ne fait pas de fallback silencieux comme ORT :
+    # la valeur que nous lui avons demandée = celle qui sera utilisée.
+    if force_cpu:
+        _provider_status = "cpu-forced"
+    elif device == "cuda":
+        _provider_status = "cuda"
+    elif has_gpu:
+        # GPU détecté mais on tombe sur CPU pour une raison non DICTEE_FORCE_CPU
+        # (ne devrait pas arriver vu la logique ci-dessus, garde-fou).
+        _provider_status = "cpu"
+    else:
+        _provider_status = "cpu-only"
+    try:
+        with open("/dev/shm/.dictee_provider", "w") as _f:
+            _f.write(_provider_status)
+    except OSError:
+        pass  # Best-effort, ne pas faire planter le daemon
+
     print(f"Modèle chargé. Écoute sur {sock_path}", file=sys.stderr)
 
     # — Création du socket Unix —

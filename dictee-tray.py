@@ -143,6 +143,7 @@ def _spawn_detached(cmd):
 
 
 STATE_FILE = "/dev/shm/.dictee_state"
+PROVIDER_FILE = "/dev/shm/.dictee_provider"
 TRANSLATE_FLAG = f"/tmp/dictee_translate-{os.getuid()}"
 APP_ID = "dictee"
 SERVICES = ("dictee", "dictee-vosk", "dictee-whisper", "dictee-canary")
@@ -562,6 +563,24 @@ def daemon_stop():
             pass
 
 
+def read_provider():
+    """Lit le provider effectif depuis /dev/shm/.dictee_provider.
+
+    Valeurs possibles (cf. execution::provider_status() côté Rust) :
+    - 'cuda' : GPU NVIDIA actif (paquet cuda + libs OK)
+    - 'cpu' : fallback silencieux (paquet cuda + GPU détecté + libs manquantes
+      → l'utilisateur croit être en GPU mais tourne en CPU)
+    - 'cpu-forced' : DICTEE_FORCE_CPU=1 explicite
+    - 'cpu-only' : paquet sans cuda, ou pas de GPU NVIDIA
+    - '' : daemon pas démarré
+    """
+    try:
+        with open(PROVIDER_FILE, "r") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def read_state():
     """Lit l'état depuis /dev/shm/.dictee_state."""
     try:
@@ -608,6 +627,8 @@ class DicteeTrayAppIndicator:
 
         self.state = "offline"
         self._prev_state = None
+        self.provider = ""
+        self._prev_provider = None
         self._daemon_active = False
         self._start_retries = 0
 
@@ -946,16 +967,25 @@ class DicteeTrayAppIndicator:
 
     def _on_asr_toggled(self, item, backend, quant):
         if item.get_active():
-            # Skip `asr` si déjà sur le bon backend — évite double restart
-            # du daemon (cf. fix plasmoid 2026-05-21).
+            # Skip `asr` si déjà sur le bon backend. Si quant + asr tous deux
+            # nécessaires, chaîner `quant && asr` séquentiellement pour éviter
+            # un double load du daemon (asr restart avec ancien quant/FORCE_CPU,
+            # puis quant restart avec les bonnes valeurs → load GPU transitoire
+            # visible dans nvtop). Cf. fix 2026-05-21.
             current_b = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
-            if current_b != backend:
+            current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+            need_quant = quant in ("fp32", "int8") and current_q != quant
+            need_asr = current_b != backend
+            if need_quant and need_asr:
+                subprocess.Popen([
+                    "bash", "-c",
+                    f"dictee-switch-backend quant {quant} && "
+                    f"dictee-switch-backend asr {backend}"
+                ])
+            elif need_asr:
                 subprocess.Popen(["dictee-switch-backend", "asr", backend])
-            # For Parakeet, also switch quantization variant if needed
-            if quant in ("fp32", "int8"):
-                current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
-                if current_q != quant:
-                    subprocess.Popen(["dictee-switch-backend", "quant", quant])
+            elif need_quant:
+                subprocess.Popen(["dictee-switch-backend", "quant", quant])
             from gi.repository import GLib
             GLib.timeout_add(2000, self._delayed_daemon_refresh)
 
@@ -1047,6 +1077,8 @@ class DicteeTrayQt:
         self.app = app
         self.state = "offline"
         self._prev_state = None
+        self.provider = ""
+        self._prev_provider = None
         self._daemon_active = False
         self._start_retries = 0
 
@@ -1076,11 +1108,17 @@ class DicteeTrayQt:
 
         self.tray.show()
 
-        # Watcher fichier état
+        # Watcher fichiers état + provider
         self._watcher = QFileSystemWatcher()
         if os.path.isfile(STATE_FILE):
             self._watcher.addPath(STATE_FILE)
+        if os.path.isfile(PROVIDER_FILE):
+            self._watcher.addPath(PROVIDER_FILE)
         self._watcher.fileChanged.connect(self._on_state_changed)
+
+        # Lecture initiale du provider (au cas où le daemon est déjà actif)
+        self.provider = read_provider()
+        self._apply_provider()
 
         # Timer lent pour le check daemon
         self._timer_slow = QTimer()
@@ -1257,16 +1295,23 @@ class DicteeTrayQt:
         data = action.data() or {}
         backend = data.get("backend", "parakeet")
         quant = data.get("quant")
-        # Skip `asr` si déjà sur le bon backend — évite double restart
-        # du daemon (cf. fix plasmoid 2026-05-21).
+        # Skip `asr` si déjà sur le bon backend. Si quant + asr tous deux
+        # nécessaires, chaîner `quant && asr` séquentiellement (cf. fix
+        # plasmoid 2026-05-21 — évite double load du daemon Parakeet).
         current_b = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
-        if current_b != backend:
+        current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
+        need_quant = quant in ("fp32", "int8") and current_q != quant
+        need_asr = current_b != backend
+        if need_quant and need_asr:
+            subprocess.Popen([
+                "bash", "-c",
+                f"dictee-switch-backend quant {quant} && "
+                f"dictee-switch-backend asr {backend}"
+            ])
+        elif need_asr:
             subprocess.Popen(["dictee-switch-backend", "asr", backend])
-        # For Parakeet, also switch quantization variant if it differs
-        if quant in ("fp32", "int8"):
-            current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
-            if current_q != quant:
-                subprocess.Popen(["dictee-switch-backend", "quant", quant])
+        elif need_quant:
+            subprocess.Popen(["dictee-switch-backend", "quant", quant])
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(2000, self._delayed_daemon_refresh)
 
@@ -1415,6 +1460,10 @@ class DicteeTrayQt:
         self.tray.setToolTip(tooltips.get(self.state, _("Dictation")))
 
         pad = "\u2003" * 6
+        # Suffixe provider (' (sur GPU)' / ' (sur CPU)' / ''). N'appara\u00eet
+        # que sur les \u00e9tats "actifs" du daemon \u2014 pas de sens quand offline
+        # ou diarize-ready.
+        psfx = self._provider_suffix() if self.state not in ("offline", "diarize") else ""
         if self.state == "diarize":
             self.action_daemon.setText(f"  {_('Diarization ready')}{pad}▶")
             self.action_daemon.setIcon(self._dot_icon("#9B59B6"))
@@ -1430,7 +1479,7 @@ class DicteeTrayQt:
                       "preparing": _("Preparing diarization…"),
                       "diarize-ready": _("Ready for diarization")}
             self.action_daemon.setText(
-                f"{labels.get(self.state, '  ' + _('Daemon active'))}{pad}■")
+                f"{labels.get(self.state, '  ' + _('Daemon active'))}{pad}■{psfx}")
             violet_states = ("diarizing", "preparing", "diarize-ready")
             self.action_daemon.setIcon(
                 self._dot_icon("#9B59B6" if self.state in violet_states else "#2ecc71"))
@@ -1456,15 +1505,51 @@ class DicteeTrayQt:
         self._prev_state = self.state
 
     def _on_state_changed(self, path):
-        self._check_state()
-        self._apply_state()
-        if not self._watcher.files():
+        # Dispatch selon le fichier changé : state vs provider
+        if path == PROVIDER_FILE:
+            self.provider = read_provider()
+            self._apply_provider()
+        else:
+            self._check_state()
+            self._apply_state()
+        # Qt retire le path du watcher si le fichier est effacé/recréé —
+        # ré-ajouter si toujours existant pour ne pas perdre la notification.
+        if path and os.path.isfile(path) and path not in (self._watcher.files() or []):
             self._watcher.addPath(path)
+
+    def _provider_suffix(self):
+        """Retourne un badge unicode coloré : 🟢 cuda, 🔴 cpu*, '' inconnu.
+        Ajouté à la fin du label daemon (après ■) — pareil que le badge
+        rond du plasmoid full representation.
+        """
+        if self.provider == "cuda":
+            return " \U0001F7E2"  # 🟢 large green circle
+        if self.provider in ("cpu", "cpu-forced", "cpu-only"):
+            return " \U0001F534"  # 🔴 large red circle
+        return ""
+
+    def _apply_provider(self):
+        if self.provider == self._prev_provider:
+            return
+        _dbg(f"provider (qt): {self._prev_provider} → {self.provider}")
+        # Le label daemon (action_daemon.text) inclut maintenant le suffixe
+        # provider. On force re-rendu via _apply_state en invalidant le cache.
+        self._prev_state = None
+        self._apply_state()
+        self._prev_provider = self.provider
 
     def _poll_slow(self):
         self._check_daemon()
         if os.path.isfile(STATE_FILE) and STATE_FILE not in (self._watcher.files() or []):
             self._watcher.addPath(STATE_FILE)
+        if os.path.isfile(PROVIDER_FILE) and PROVIDER_FILE not in (self._watcher.files() or []):
+            self._watcher.addPath(PROVIDER_FILE)
+        # Fallback provider refresh (au cas où fileChanged a été manqué —
+        # Qt notifie pas si écriture atomique via mv -f par ex.).
+        new_provider = read_provider()
+        if new_provider != self.provider:
+            self.provider = new_provider
+            self._apply_provider()
         self._check_state()
         self._apply_state()
         # Refresh the ASR/translate submenu state (enabled/checked) so newly-

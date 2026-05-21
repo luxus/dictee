@@ -29,6 +29,10 @@ Item {
     // clicking opens the popup explaining why it's inactive.
     property bool isActive: true
 
+    // ASR provider effectif (depuis /dev/shm/.dictee_provider via main.qml).
+    // Badge "G" rouge affiché si "cpu" = fallback silencieux détecté.
+    property string provider: ""
+
     readonly property bool animActive: state === "recording" || state === "transcribing"
 
     Layout.preferredWidth: {
@@ -196,6 +200,36 @@ Item {
             font.pixelSize: parent.width * 0.7
             font.bold: true
             color: Kirigami.Theme.negativeTextColor
+        }
+    }
+
+    // Provider status marker: green "G" si cuda, rouge sinon (cpu / cpu-forced
+    // / cpu-only). Toujours visible quand provider est connu — l'utilisateur
+    // voit en permanence sur quel device tourne le daemon. Caché si l'instance
+    // est passive (⊘ a la priorité) ou si provider vide (daemon pas démarré).
+    Rectangle {
+        visible: compact.isActive && compact.provider !== ""
+        z: 99
+        width: Math.max(8, Math.min(parent.width, parent.height) * 0.35)
+        height: width
+        radius: width / 2
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        color: compact.provider === "cuda"
+            ? Kirigami.Theme.positiveBackgroundColor
+            : Kirigami.Theme.negativeBackgroundColor
+        border.color: compact.provider === "cuda"
+            ? Kirigami.Theme.positiveTextColor
+            : Kirigami.Theme.negativeTextColor
+        border.width: 1
+        Text {
+            anchors.centerIn: parent
+            text: "G"
+            font.pixelSize: parent.width * 0.65
+            font.bold: true
+            color: compact.provider === "cuda"
+                ? Kirigami.Theme.positiveTextColor
+                : Kirigami.Theme.negativeTextColor
         }
     }
 

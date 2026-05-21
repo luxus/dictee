@@ -229,6 +229,76 @@ pub fn cuda_runtime_available() -> bool {
     std::path::Path::new("/dev/nvidia0").exists()
 }
 
+/// Check via `ldconfig -p` that the ORT CUDA EP plugin and its CUDA runtime
+/// dependencies are reachable by the dynamic loader. This is the install-time
+/// check that catches the silent CPU-fallback case (paquet cuda installé +
+/// GPU NVIDIA détecté + `/etc/ld.so.conf.d/dictee.conf` manquant ⇒ ORT
+/// échoue à charger le plugin CUDA et fallback CPU sans rien dire).
+///
+/// `libonnxruntime_providers_cuda.so` est un plugin ORT (undefined symbol
+/// `Provider_GetHost` résolu par `libonnxruntime.so.1`), donc on ne peut
+/// pas le tester via `dlopen` direct. ORT utilise le loader système pour
+/// trouver ses plugins → si `ldconfig -p` connaît la lib, ORT la trouvera.
+///
+/// Returns true seulement si TOUTES les libs requises sont dans le ld
+/// search path. Si `ldconfig` est introuvable (cas très rare), retourne
+/// false par sécurité.
+#[cfg(feature = "cuda")]
+pub fn ldconfig_has_cuda_libs() -> bool {
+    let out = match std::process::Command::new("ldconfig").arg("-p").output() {
+        Ok(o) if o.status.success() => o,
+        _ => return false,
+    };
+    let s = String::from_utf8_lossy(&out.stdout);
+    const REQUIRED: &[&str] = &[
+        "libonnxruntime_providers_cuda.so",
+        "libcudart.so.12",
+        "libcudnn.so.9",
+    ];
+    REQUIRED.iter().all(|lib| {
+        let needle = format!("{lib} ");
+        s.lines().any(|line| line.trim_start().starts_with(&needle))
+    })
+}
+
+/// Detailed provider status string for `/dev/shm/.dictee_provider`,
+/// consumed by plasmoid + tray + dictee-setup. Distinguishes the silent
+/// CPU-fallback case from legitimate CPU choices.
+///
+/// Returns one of:
+/// - `"cuda"` — paquet cuda + GPU NVIDIA + libs OK ⇒ ORT activera CUDA
+/// - `"cpu"` — paquet cuda + GPU NVIDIA + libs manquantes ⇒ trou silencieux !
+///   (le plasmoid affichera un badge rouge)
+/// - `"cpu-forced"` — `DICTEE_FORCE_CPU=1` explicite par l'utilisateur
+/// - `"cpu-only"` — pas de feature cuda compilée OU pas de GPU NVIDIA
+pub fn provider_status() -> &'static str {
+    if std::env::var("DICTEE_FORCE_CPU")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+    {
+        return "cpu-forced";
+    }
+    #[cfg(feature = "cuda")]
+    {
+        // GPU NVIDIA détecté (driver kernel chargé + /dev/nvidia0) ?
+        let nvidia_present = std::fs::read_dir("/proc/driver/nvidia/gpus")
+            .ok()
+            .and_then(|mut e| e.next())
+            .is_some()
+            || std::path::Path::new("/dev/nvidia0").exists();
+        if !nvidia_present {
+            return "cpu-only";
+        }
+        if ldconfig_has_cuda_libs() {
+            return "cuda";
+        }
+        // GPU présent + paquet cuda + libs manquantes → fallback silencieux !
+        return "cpu";
+    }
+    #[cfg(not(feature = "cuda"))]
+    "cpu-only"
+}
+
 /// Pick the best execution provider available at runtime.
 ///
 /// CUDA-enabled binaries call this instead of hard-wiring `Cuda`, so the

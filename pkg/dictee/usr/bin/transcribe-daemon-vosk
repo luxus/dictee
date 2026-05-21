@@ -149,6 +149,17 @@ def main():
     model_dir = find_model_dir()
     print(f"Chargement du modèle depuis {model_dir}...", file=sys.stderr)
     model = Model(model_dir)
+
+    # — Écrit le provider effectif dans /dev/shm/.dictee_provider —
+    # Vosk tourne TOUJOURS sur CPU (pas d'accélération GPU dans la lib).
+    # Consommé par plasmoid (badge), tray (menu), dictee-setup (status).
+    # Best-effort : si /dev/shm pas writable, on n'arrête pas le daemon.
+    try:
+        with open("/dev/shm/.dictee_provider", "w") as _f:
+            _f.write("cpu-only")
+    except OSError:
+        pass
+
     print(f"Modèle chargé. Écoute sur {sock_path}", file=sys.stderr)
 
     # Créer le socket Unix

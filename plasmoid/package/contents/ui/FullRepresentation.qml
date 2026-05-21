@@ -15,6 +15,9 @@ RowLayout {
     property bool dicteeConfigured: true
     property color barColor: Kirigami.Theme.textColor
     property string lastTranscription: ""
+    // ASR provider effectif depuis /dev/shm/.dictee_provider (via main.qml).
+    // 'cuda' = badge vert | 'cpu'/'cpu-forced'/'cpu-only' = badge rouge.
+    property string provider: ""
     // Singleton flag from main.qml — when false, this widget is a duplicate
     // instance; we overlay a passive banner and disable all actions to avoid
     // racing with the active master instance.
@@ -259,6 +262,24 @@ RowLayout {
                         text: fullRep.state === "offline" ? i18n("Start daemon") : i18n("Stop daemon")
                     }
                     onClicked: fullRep.actionRequested(fullRep.state === "offline" ? "start-daemon" : "stop-daemon")
+                }
+
+                // Provider badge: vert si cuda, rouge sinon (cpu/cpu-forced/cpu-only).
+                // Caché quand le daemon est offline ou provider inconnu.
+                Rectangle {
+                    visible: fullRep.provider !== ""
+                             && fullRep.state !== "offline"
+                    width: Kirigami.Units.smallSpacing * 3
+                    height: width
+                    radius: width / 2
+                    color: fullRep.provider === "cuda" ? "#27ae60" : "#c0392b"
+                    border.color: fullRep.provider === "cuda" ? "#1e8449" : "#922b21"
+                    border.width: 1
+                    PlasmaComponents.ToolTip {
+                        text: fullRep.provider === "cuda"
+                            ? i18n("Daemon running on GPU")
+                            : i18n("Daemon running on CPU")
+                    }
                 }
             }
         }
@@ -586,16 +607,28 @@ RowLayout {
                     syncIndex()
                     return
                 }
-                // Switch backend; if Parakeet, also switch quantization.
-                // Skip `asr` si on est DÉJÀ sur le bon backend — sinon double
-                // restart du daemon (asr restart en fp32/GPU, puis quant
-                // restart en int8/CPU). nvtop voit un load GPU transitoire
-                // puis décharge. Bug d'efficacité signalé 2026-05-21.
-                if (item.value !== root.currentAsrBackend) {
+                // Switch backend + quant. Pour éviter double load du daemon
+                // (asr restart avec l'ancien quant/FORCE_CPU, puis quant
+                // re-restart avec les bonnes valeurs), on chaîne `quant` AVANT
+                // `asr` quand les 2 sont nécessaires.
+                // - quant AVANT asr : set_conf int8+FORCE_CPU=1, pas de
+                //   restart car Whisper actif (wrapper skip si backend != parakeet)
+                // - puis asr parakeet : démarre direct avec int8+FORCE_CPU=1 → CPU
+                var needQuant = (item.value === "parakeet" && item.quant !== "" &&
+                                 item.quant !== root.currentParakeetQuant)
+                var needAsr = (item.value !== root.currentAsrBackend)
+                if (needQuant && needAsr) {
+                    // Plasma5Support.DataSource.run() ne passe PAS par un shell
+                    // automatique pour `&&` — wrap dans `bash -c` pour exécution
+                    // séquentielle. Sinon les 2 commandes tournent en parallèle
+                    // et le daemon peut démarrer avec un état conf transitoire
+                    // incohérent → spike VRAM (vérifié 2026-05-21).
+                    executable.run("bash -c 'dictee-switch-backend quant " +
+                                   item.quant + " && dictee-switch-backend asr " +
+                                   item.value + "'")
+                } else if (needAsr) {
                     executable.run("dictee-switch-backend asr " + item.value)
-                }
-                if (item.value === "parakeet" && item.quant !== "" &&
-                        item.quant !== root.currentParakeetQuant) {
+                } else if (needQuant) {
                     executable.run("dictee-switch-backend quant " + item.quant)
                 }
             }
@@ -827,27 +860,70 @@ RowLayout {
             // Disabled when the constraint locks the position (Canary/Vosk/INT8/no-GPU),
             // or during cooldown debounce, or when dictee is not configured.
             enabled: root.forceCpuSensitive && !cooldownTimer.running && fullRep.dicteeConfigured
+            // CPU vs GPU n'est PAS un on/off — custom indicator avec couleur
+            // unique dans les 2 positions. Plasma 6 ignore palette.highlight
+            // et Kirigami.Theme.highlightColor pour le QQC2.Switch natif, on
+            // redessine track + knob nous-mêmes.
+            indicator: Rectangle {
+                implicitWidth: Kirigami.Units.gridUnit * 2.2
+                implicitHeight: Kirigami.Units.gridUnit * 1.1
+                x: forceCpuSwitch.leftPadding
+                y: forceCpuSwitch.height / 2 - height / 2
+                radius: height / 2
+                color: Kirigami.Theme.alternateBackgroundColor
+                border.color: Kirigami.Theme.disabledTextColor
+                border.width: 1
+                Rectangle {
+                    x: forceCpuSwitch.checked ? parent.width - width - 2 : 2
+                    y: 2
+                    width: parent.height - 4
+                    height: width
+                    radius: width / 2
+                    color: Kirigami.Theme.textColor
+                    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.InOutQuad } }
+                }
+            }
+            // Plasma 6 style ignore le visuel disabled sur QQC2.Switch → on
+            // force opacité + overlay gris pour signaler explicitement le
+            // verrou (Parakeet INT8 / Canary / Vosk / no-GPU). Sans ça, le
+            // switch est silencieusement non-cliquable mais visuellement
+            // normal — confusion utilisateur.
+            opacity: enabled ? 1.0 : 0.4
+            Rectangle {
+                visible: !forceCpuSwitch.enabled
+                anchors.fill: parent
+                color: Kirigami.Theme.disabledTextColor
+                opacity: 0.25
+                radius: 4
+                z: 10
+                // Bloquer le clic pour cohérence avec enabled:false
+                MouseArea { anchors.fill: parent; acceptedButtons: Qt.NoButton }
+            }
             // When constrained, show the forced position; otherwise follow conf.
             checked: !root.forceCpuSensitive
                 ? (root.forceCpuForcedPosition === "cpu")
                 : root.forceCpuActive
             property bool syncing: false  // skip onToggled when syncing from main.qml
+            // Restaure le binding via Qt.binding() quand la contrainte change.
+            // Sans ça, un assignment direct à `checked` (via onToggled user OU
+            // les handlers ci-dessous) casse le binding QML initial : checked
+            // ne suit plus l'évolution de forceCpuConstraint. Bug observé
+            // 2026-05-21 : passer à Parakeet INT8 grisait le switch mais le
+            // laissait en position GPU au lieu de CPU.
+            function _rebindChecked() {
+                forceCpuSwitch.syncing = true
+                forceCpuSwitch.checked = Qt.binding(function() {
+                    return !root.forceCpuSensitive
+                        ? (root.forceCpuForcedPosition === "cpu")
+                        : root.forceCpuActive
+                })
+                forceCpuSwitch.syncing = false
+            }
             Connections {
                 target: root
-                function onForceCpuActiveChanged() {
-                    forceCpuSwitch.syncing = true
-                    forceCpuSwitch.checked = !root.forceCpuSensitive
-                        ? (root.forceCpuForcedPosition === "cpu")
-                        : root.forceCpuActive
-                    forceCpuSwitch.syncing = false
-                }
-                function onForceCpuSensitiveChanged() {
-                    forceCpuSwitch.syncing = true
-                    forceCpuSwitch.checked = !root.forceCpuSensitive
-                        ? (root.forceCpuForcedPosition === "cpu")
-                        : root.forceCpuActive
-                    forceCpuSwitch.syncing = false
-                }
+                function onForceCpuActiveChanged()         { forceCpuSwitch._rebindChecked() }
+                function onForceCpuSensitiveChanged()      { forceCpuSwitch._rebindChecked() }
+                function onForceCpuForcedPositionChanged() { forceCpuSwitch._rebindChecked() }
             }
             // Debounce: visually disable the toggle for 2 s after each user
             // click. The flock in dictee-switch-backend serialises any

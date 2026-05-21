@@ -1,6 +1,6 @@
 use parakeet_rs::{
-    best_provider, Canary, ExecutionConfig, ParakeetTDT, TimestampMode, Transcriber,
-    TranscriptionResult,
+    best_provider, provider_status, Canary, ExecutionConfig, ParakeetTDT, TimestampMode,
+    Transcriber, TranscriptionResult,
 };
 use std::env;
 use std::fs;
@@ -163,6 +163,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Detects a usable NVIDIA GPU at runtime; falls back to CPU otherwise.
     let config = ExecutionConfig::new().with_execution_provider(best_provider());
+
+    // Write detailed provider status to /dev/shm/.dictee_provider for UI
+    // consumers (plasmoid badge, tray menu, dictee-setup). Best-effort —
+    // if /dev/shm is not writable, just skip. See execution::provider_status()
+    // for the value enum (cuda / cpu / cpu-forced / cpu-only).
+    let _ = std::fs::write("/dev/shm/.dictee_provider", provider_status());
 
     eprintln!(
         "Loading {} model from {}...",

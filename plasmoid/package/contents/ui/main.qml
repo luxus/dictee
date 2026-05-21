@@ -22,6 +22,12 @@ PlasmoidItem {
     // State: "offline", "idle", "recording", "transcribing", "switching", "preparing", "diarize-ready", "diarizing", "meeting-ui-open", "meeting-recording"
     property string state: "offline"
 
+    // ASR daemon execution provider — écrit par le daemon dans /dev/shm/.dictee_provider.
+    // Valeurs : "cuda" (GPU actif) | "cpu" (fallback silencieux ! badge G rouge)
+    //        | "cpu-forced" (DICTEE_FORCE_CPU=1) | "cpu-only" (pas de GPU/CUDA)
+    //        | "" (daemon pas démarré)
+    property string provider: ""
+
     property bool dicteeInstalled: true
     property bool dicteeConfigured: false
     property string lastTranscription: ""
@@ -128,6 +134,9 @@ PlasmoidItem {
                 if (stdout.length > 0) {
                     parseState(stdout)
                 }
+            } else if (source.indexOf("/dev/shm/.dictee_provider") !== -1) {
+                // Provider trim (le daemon écrit sans \n mais robustesse).
+                root.provider = stdout.trim()
             } else if (source === readConfCmd) {
                 var parts = stdout.trim().split("|")
                 if (parts.length >= 3) {
@@ -501,6 +510,14 @@ PlasmoidItem {
         "cat /dev/shm/.dictee_state 2>/dev/null #B"
     ]
 
+    // Provider polling — change rarement (1× au boot daemon), polled
+    // dans daemonPollTimer (lent). Ping-pong A/B pour bust le cache DataSource.
+    property int providerSlot: 0
+    readonly property var providerCmds: [
+        "cat /dev/shm/.dictee_provider 2>/dev/null #A",
+        "cat /dev/shm/.dictee_provider 2>/dev/null #B"
+    ]
+
     // Debug — reads DICTEE_DEBUG from config, logs to journalctl --user -u plasma-plasmashell
     property bool debugEnabled: false
     function _dbg(msg) {
@@ -623,6 +640,9 @@ PlasmoidItem {
         repeat: true
         triggeredOnStart: true
         onTriggered: {
+            // Provider polling embarqué ici (changement rare, slow poll OK).
+            root.providerSlot = 1 - root.providerSlot
+            executable.run(root.providerCmds[root.providerSlot])
             executable.run(daemonCheckCmd)
             refreshBackends()
         }
@@ -719,10 +739,12 @@ PlasmoidItem {
         audioBands: root.audioBands
         sensitivity: root.activeSensitivity
         isActive: root.isActive
+        provider: root.provider
     }
 
     fullRepresentation: FullRepresentation {
         state: root.state
+        provider: root.provider
         dicteeInstalled: root.dicteeInstalled
         dicteeConfigured: root.dicteeConfigured
         barColor: root.barColor
