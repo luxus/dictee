@@ -8959,7 +8959,10 @@ class DicteeSetupDialog(QDialog):
         # Row 3: Performance profile (HardwareProfile pattern, 2026-05-21)
         # Tier maps to beam_size: ultra=5, high=3, medium=2, low=1. Auto =
         # detected from cores + RAM + VRAM at daemon startup.
-        _ram_gb, _gpu_name, _vram_gb, _ = self._get_system_info()
+        # NB: ne pas destructurer en `_` ici — `_` est la fonction gettext
+        # utilisée plus haut dans la fonction. Python rendrait `_` local
+        # à toute la fonction → UnboundLocalError sur tous les _("...").
+        _ram_gb, _gpu_name, _vram_gb, _gpu_free = self._get_system_info()
         _detected_tier = self._detect_hw_tier(_ram_gb, _vram_gb)
         _cores = os.cpu_count() or 4
         lbl_hw_tier = QLabel(_("Performance profile:"))
