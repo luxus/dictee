@@ -388,6 +388,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
                 meeting_chunk_s=40,
                 meeting_always_on_top=True,
                 meeting_all_desktops=False,
+                hw_tier="auto",
                 mark_setup_done=True):
     """Update dictee.conf preserving comments and structure.
 
@@ -428,6 +429,7 @@ def save_config(backend, lang_source, lang_target, clipboard=True,
         "DICTEE_AUDIO_CONTEXT": "true" if audio_context else "false",
         "DICTEE_AUDIO_CONTEXT_TIMEOUT": str(audio_context_timeout),
         "DICTEE_SILENCE_RMS": f"{silence_rms:.3f}",
+        "DICTEE_HW_TIER": _s(hw_tier) if hw_tier else "auto",
     }
     # DICTEE_SETUP_DONE is added only when explicitly committing the wizard
     # (Finish button or classic Apply). At wizard checks-page entry (page 6→7
@@ -7194,6 +7196,17 @@ class DicteeSetupDialog(QDialog):
             return "vosk"
         return "parakeet"
 
+    def _detect_hw_tier(self, ram_gb, vram_gb):
+        """Whisper performance tier (mirror of transcribe-daemon-whisper)."""
+        cores = os.cpu_count() or 4
+        if vram_gb >= 8 and ram_gb >= 16 and cores >= 8:
+            return "ultra"
+        if vram_gb >= 4 and ram_gb >= 8:
+            return "high"
+        if cores >= 8 and ram_gb >= 16:
+            return "medium"
+        return "low"
+
     def _build_wizard_page1(self, conf):
         page = QWidget()
         page_lay = QVBoxLayout(page)
@@ -8943,6 +8956,40 @@ class DicteeSetupDialog(QDialog):
         self.btn_del_whisper_venv.clicked.connect(lambda: self._delete_venv("whisper"))
         row.addWidget(self.btn_del_whisper_venv)
 
+        # Row 3: Performance profile (HardwareProfile pattern, 2026-05-21)
+        # Tier maps to beam_size: ultra=5, high=3, medium=2, low=1. Auto =
+        # detected from cores + RAM + VRAM at daemon startup.
+        _ram_gb, _gpu_name, _vram_gb, _ = self._get_system_info()
+        _detected_tier = self._detect_hw_tier(_ram_gb, _vram_gb)
+        _cores = os.cpu_count() or 4
+        lbl_hw_tier = QLabel(_("Performance profile:"))
+        self.cmb_whisper_hw_tier = QComboBox()
+        self.cmb_whisper_hw_tier.setFixedWidth(150)
+        _tier_items = [
+            ("auto",   _("Auto (detected)")),
+            ("ultra",  _("Ultra (beam=5)")),
+            ("high",   _("High (beam=3)")),
+            ("medium", _("Medium (beam=2)")),
+            ("low",    _("Low (beam=1)")),
+        ]
+        for code, label in _tier_items:
+            self.cmb_whisper_hw_tier.addItem(label, code)
+        _cur_tier = self.conf.get("DICTEE_HW_TIER", "auto").lower()
+        _idx = self.cmb_whisper_hw_tier.findData(_cur_tier)
+        self.cmb_whisper_hw_tier.setCurrentIndex(_idx if _idx >= 0 else 0)
+        self.cmb_whisper_hw_tier.currentIndexChanged.connect(self._mark_dirty)
+        self._lbl_hw_tier_detected = QLabel(
+            _("Detected: {tier} — {cores} cores, {ram} GB RAM, {vram} GB VRAM").format(
+                tier=_detected_tier, cores=_cores, ram=int(_ram_gb), vram=int(_vram_gb)))
+        self._lbl_hw_tier_detected.setStyleSheet("color: gray;")
+        row_hw = QHBoxLayout()
+        row_hw.setContentsMargins(24, 0, 0, 0)
+        row_hw.addWidget(lbl_hw_tier)
+        row_hw.addWidget(self.cmb_whisper_hw_tier)
+        row_hw.addWidget(self._lbl_hw_tier_detected)
+        row_hw.addStretch()
+        whisper_outer.addLayout(row_hw)
+
         self._lbl_whisper_status = QLabel()
         self._lbl_whisper_status.setContentsMargins(24, 0, 0, 0)
         self._lbl_whisper_status.setWordWrap(True)
@@ -8951,6 +8998,8 @@ class DicteeSetupDialog(QDialog):
         self._whisper_config_widgets = [self._lbl_wh_model, self.cmb_whisper_model,
                                         self.btn_download_whisper, self.btn_del_whisper_model,
                                         lbl_wh_lang, self.txt_whisper_lang, lbl_auto,
+                                        lbl_hw_tier, self.cmb_whisper_hw_tier,
+                                        self._lbl_hw_tier_detected,
                                         self._lbl_whisper_status]
         for w in self._whisper_config_widgets:
             w.setEnabled(whisper_installed)
@@ -18146,6 +18195,9 @@ class DicteeSetupDialog(QDialog):
                     meeting_all_desktops=(
                         self.chk_meeting_all_desktops.isChecked()
                         if hasattr(self, 'chk_meeting_all_desktops') else False),
+                    hw_tier=(
+                        self.cmb_whisper_hw_tier.currentData()
+                        if hasattr(self, 'cmb_whisper_hw_tier') else "auto"),
                     mark_setup_done=mark_setup_done)
 
         # Register the cheatsheet shortcut.

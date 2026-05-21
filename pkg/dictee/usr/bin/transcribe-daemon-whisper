@@ -16,7 +16,59 @@ for d in os.listdir(VENV_SITE) if os.path.isdir(VENV_SITE) else []:
         sys.path.insert(0, sp)
 
 import ctranslate2  # noqa: E402
+import subprocess  # noqa: E402
 from faster_whisper import WhisperModel  # noqa: E402
+
+
+# Mapping tier → beam_size (Meetily pattern #4, 2026-05-21).
+# Higher beam_size = better accuracy, slower transcription.
+# temperature reste celle anti-halluc (voir commit 353462b) — le tier
+# ne touche que beam_size.
+TIER_BEAM_SIZE = {
+    "ultra":  5,
+    "high":   3,
+    "medium": 2,
+    "low":    1,
+}
+
+
+def _detect_hw_tier():
+    """Auto-detect performance tier from cores + RAM + VRAM.
+
+    Returns one of: 'ultra' / 'high' / 'medium' / 'low'.
+    Linux-only (uses /proc/meminfo and nvidia-smi).
+    """
+    cpu_cores = os.cpu_count() or 4
+
+    ram_gb = 8  # fallback
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    ram_gb = int(line.split()[1]) // (1024 * 1024)
+                    break
+    except OSError:
+        pass
+
+    vram_gb = 0
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.total",
+             "--format=csv,noheader,nounits"],
+            timeout=2, text=True,
+        )
+        vram_gb = int(out.strip().split("\n")[0]) // 1024
+    except (FileNotFoundError, subprocess.TimeoutExpired,
+            subprocess.CalledProcessError, ValueError):
+        pass
+
+    if vram_gb >= 8 and ram_gb >= 16 and cpu_cores >= 8:
+        return "ultra"
+    if vram_gb >= 4 and ram_gb >= 8:
+        return "high"
+    if cpu_cores >= 8 and ram_gb >= 16:
+        return "medium"
+    return "low"
 
 
 def socket_path():
@@ -49,10 +101,19 @@ def main():
     else:
         device, compute_type = "cuda", "int8_float16"
 
+    # — Profil hardware → beam_size (Meetily pattern #4) —
+    tier_env = os.environ.get("DICTEE_HW_TIER", "auto").lower()
+    if tier_env in TIER_BEAM_SIZE:
+        tier = tier_env
+    else:
+        tier = _detect_hw_tier()
+    beam_size = TIER_BEAM_SIZE[tier]
+
     # — Chargement du modèle (une seule fois) —
     print(
         f"Chargement du modèle faster-whisper '{model_size}' "
-        f"[device={device}, compute={compute_type}]…",
+        f"[device={device}, compute={compute_type}, tier={tier}, "
+        f"beam_size={beam_size}]…",
         file=sys.stderr,
     )
     model = WhisperModel(model_size, device=device, compute_type=compute_type)
@@ -119,7 +180,7 @@ def main():
             segments, _info = model.transcribe(
                 wav_path,
                 language=language,
-                beam_size=5,
+                beam_size=beam_size,
                 vad_filter=True,
                 word_timestamps=timestamps_mode,
                 condition_on_previous_text=False,
