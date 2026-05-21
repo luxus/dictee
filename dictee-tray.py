@@ -946,7 +946,11 @@ class DicteeTrayAppIndicator:
 
     def _on_asr_toggled(self, item, backend, quant):
         if item.get_active():
-            subprocess.Popen(["dictee-switch-backend", "asr", backend])
+            # Skip `asr` si déjà sur le bon backend — évite double restart
+            # du daemon (cf. fix plasmoid 2026-05-21).
+            current_b = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
+            if current_b != backend:
+                subprocess.Popen(["dictee-switch-backend", "asr", backend])
             # For Parakeet, also switch quantization variant if needed
             if quant in ("fp32", "int8"):
                 current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()
@@ -1253,7 +1257,11 @@ class DicteeTrayQt:
         data = action.data() or {}
         backend = data.get("backend", "parakeet")
         quant = data.get("quant")
-        subprocess.Popen(["dictee-switch-backend", "asr", backend])
+        # Skip `asr` si déjà sur le bon backend — évite double restart
+        # du daemon (cf. fix plasmoid 2026-05-21).
+        current_b = read_conf_value("DICTEE_ASR_BACKEND", "parakeet").lower()
+        if current_b != backend:
+            subprocess.Popen(["dictee-switch-backend", "asr", backend])
         # For Parakeet, also switch quantization variant if it differs
         if quant in ("fp32", "int8"):
             current_q = read_conf_value("DICTEE_PARAKEET_QUANT", "fp32").lower()

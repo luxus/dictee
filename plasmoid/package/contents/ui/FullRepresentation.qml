@@ -586,8 +586,14 @@ RowLayout {
                     syncIndex()
                     return
                 }
-                // Switch backend; if Parakeet, also switch quantization
-                executable.run("dictee-switch-backend asr " + item.value)
+                // Switch backend; if Parakeet, also switch quantization.
+                // Skip `asr` si on est DÉJÀ sur le bon backend — sinon double
+                // restart du daemon (asr restart en fp32/GPU, puis quant
+                // restart en int8/CPU). nvtop voit un load GPU transitoire
+                // puis décharge. Bug d'efficacité signalé 2026-05-21.
+                if (item.value !== root.currentAsrBackend) {
+                    executable.run("dictee-switch-backend asr " + item.value)
+                }
                 if (item.value === "parakeet" && item.quant !== "" &&
                         item.quant !== root.currentParakeetQuant) {
                     executable.run("dictee-switch-backend quant " + item.quant)
