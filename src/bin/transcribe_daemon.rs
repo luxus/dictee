@@ -1,6 +1,6 @@
 use parakeet_rs::{
-    best_provider, provider_status, Canary, ExecutionConfig, ParakeetTDT, TimestampMode,
-    Transcriber, TranscriptionResult,
+    best_provider, provider_status, Canary, ExecutionConfig, ExecutionProvider, ParakeetTDT,
+    TimestampMode, Transcriber, TranscriptionResult,
 };
 use std::env;
 use std::fs;
@@ -63,6 +63,69 @@ impl AsrBackend {
             AsrBackend::Canary(c) => c.last_token_ids().is_some(),
             AsrBackend::Parakeet(_) => false,
         }
+    }
+}
+
+/// True si le modèle Parakeet qui SERA chargé depuis `model_dir` est int8.
+/// Reproduit l'ordre de `ParakeetTDTModel::find_encoder` (master) : si
+/// `prefers_int8` (DICTEE_PARAKEET_QUANT=int8), l'int8 est prioritaire (chargé
+/// dès qu'il existe) ; sinon le FP32 gagne et l'int8 n'est retenu que s'il est
+/// seul. `prefers_int8` passé en paramètre = helper pur, testable. À garder
+/// synchrone avec find_encoder.
+fn parakeet_resolves_to_int8(model_dir: &Path, prefers_int8: bool) -> bool {
+    if !model_dir.join("encoder-model.int8.onnx").exists() {
+        return false;
+    }
+    prefers_int8
+        || (!model_dir.join("encoder-model.onnx").exists()
+            && !model_dir.join("encoder.onnx").exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parakeet_resolves_to_int8;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir()
+            .join(format!("dictee_int8m_test_{}_{}", std::process::id(), tag));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn int8_only_is_int8() {
+        let d = tmp("only_int8");
+        fs::write(d.join("encoder-model.int8.onnx"), b"").unwrap();
+        assert!(parakeet_resolves_to_int8(&d, false));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn fp32_present_without_pref_is_not_int8() {
+        let d = tmp("fp32_int8_nopref");
+        fs::write(d.join("encoder-model.onnx"), b"").unwrap();
+        fs::write(d.join("encoder-model.int8.onnx"), b"").unwrap();
+        assert!(!parakeet_resolves_to_int8(&d, false));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn prefers_int8_with_both_is_int8() {
+        let d = tmp("fp32_int8_pref");
+        fs::write(d.join("encoder-model.onnx"), b"").unwrap();
+        fs::write(d.join("encoder-model.int8.onnx"), b"").unwrap();
+        assert!(parakeet_resolves_to_int8(&d, true));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn no_model_is_not_int8() {
+        let d = tmp("empty");
+        assert!(!parakeet_resolves_to_int8(&d, false));
+        let _ = fs::remove_dir_all(&d);
     }
 }
 
@@ -161,14 +224,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::remove_file(&socket_path)?;
     }
 
-    // Detects a usable NVIDIA GPU at runtime; falls back to CPU otherwise.
-    let config = ExecutionConfig::new().with_execution_provider(best_provider());
+    // Parakeet int8 is forced to CPU: the ORT CUDA EP doesn't optimize int8
+    // ops (slower than int8 on CPU/AVX-VNNI), so int8 on the GPU is never
+    // worthwhile. Canary has no int8 variant. DICTEE_PARAKEET_QUANT=int8 lets
+    // the user prefer int8 even when fp32 is present (cf. find_encoder).
+    let prefers_int8 = std::env::var("DICTEE_PARAKEET_QUANT")
+        .map(|v| v.eq_ignore_ascii_case("int8"))
+        .unwrap_or(false);
+    let force_cpu_int8 =
+        !use_canary && parakeet_resolves_to_int8(Path::new(&model_dir), prefers_int8);
+    let provider = if force_cpu_int8 {
+        eprintln!("[dictee] Parakeet int8 model — forcing CPU (int8 is slow on the CUDA EP)");
+        ExecutionProvider::Cpu
+    } else {
+        best_provider()
+    };
+    let config = ExecutionConfig::new().with_execution_provider(provider);
 
     // Write detailed provider status to /dev/shm/.dictee_provider for UI
-    // consumers (plasmoid badge, tray menu, dictee-setup). Best-effort —
-    // if /dev/shm is not writable, just skip. See execution::provider_status()
-    // for the value enum (cuda / cpu / cpu-forced / cpu-only).
-    let _ = std::fs::write("/dev/shm/.dictee_provider", provider_status());
+    // consumers (plasmoid badge, tray menu, dictee-setup). "cpu-int8" is a
+    // CPU-voulu value (blue badge); provider_status() would say "cuda" here.
+    let _ = std::fs::write(
+        "/dev/shm/.dictee_provider",
+        if force_cpu_int8 { "cpu-int8" } else { provider_status() },
+    );
 
     eprintln!(
         "Loading {} model from {}...",
