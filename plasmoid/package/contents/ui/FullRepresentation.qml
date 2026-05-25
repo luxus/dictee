@@ -16,7 +16,7 @@ RowLayout {
     property color barColor: Kirigami.Theme.textColor
     property string lastTranscription: ""
     // ASR provider effectif depuis /dev/shm/.dictee_provider (via main.qml).
-    // 'cuda' = badge vert | 'cpu'/'cpu-forced'/'cpu-only' = badge rouge.
+    // 'cuda' = vert | 'cpu' = rouge (panne) | 'cpu-forced'/'cpu-only'/'cpu-int8' = bleu.
     property string provider: ""
     // Singleton flag from main.qml — when false, this widget is a duplicate
     // instance; we overlay a passive banner and disable all actions to avoid
@@ -264,7 +264,7 @@ RowLayout {
                     onClicked: fullRep.actionRequested(fullRep.state === "offline" ? "start-daemon" : "stop-daemon")
                 }
 
-                // Provider badge: vert si cuda, rouge sinon (cpu/cpu-forced/cpu-only).
+                // Provider badge (point) : vert=cuda | rouge=cpu (panne) | bleu=CPU voulu.
                 // Caché quand le daemon est offline ou provider inconnu.
                 Rectangle {
                     visible: fullRep.provider !== ""
@@ -272,12 +272,18 @@ RowLayout {
                     width: Kirigami.Units.smallSpacing * 3
                     height: width
                     radius: width / 2
-                    color: fullRep.provider === "cuda" ? "#27ae60" : "#c0392b"
-                    border.color: fullRep.provider === "cuda" ? "#1e8449" : "#922b21"
+                    color: fullRep.provider === "cuda" ? "#27ae60"
+                         : fullRep.provider === "cpu"  ? "#c0392b"
+                         : "#3498db"
+                    border.color: fullRep.provider === "cuda" ? "#1e8449"
+                                : fullRep.provider === "cpu"  ? "#922b21"
+                                : "#21618c"
                     border.width: 1
                     PlasmaComponents.ToolTip {
                         text: fullRep.provider === "cuda"
                             ? i18n("Daemon running on GPU")
+                            : fullRep.provider === "cpu"
+                            ? i18n("GPU unavailable — running on CPU")
                             : i18n("Daemon running on CPU")
                     }
                 }

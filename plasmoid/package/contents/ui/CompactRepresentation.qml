@@ -203,34 +203,22 @@ Item {
         }
     }
 
-    // Provider status marker: green "G" si cuda, rouge sinon (cpu / cpu-forced
-    // / cpu-only). Toujours visible quand provider est connu — l'utilisateur
-    // voit en permanence sur quel device tourne le daemon. Caché si l'instance
+    // Provider status marker: lettre colorée SANS cercle.
+    //   G vert  = GPU (cuda) ; G rouge = GPU panne (cpu = libs CUDA cassées) ;
+    //   C bleu  = CPU voulu (cpu-forced / cpu-only / cpu-int8).
+    // La lettre dit GPU(G)/CPU(C), la couleur dit l'état. Caché si l'instance
     // est passive (⊘ a la priorité) ou si provider vide (daemon pas démarré).
-    Rectangle {
+    Text {
         visible: compact.isActive && compact.provider !== ""
         z: 99
-        width: Math.max(8, Math.min(parent.width, parent.height) * 0.35)
-        height: width
-        radius: width / 2
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        color: compact.provider === "cuda"
-            ? Kirigami.Theme.positiveBackgroundColor
-            : Kirigami.Theme.negativeBackgroundColor
-        border.color: compact.provider === "cuda"
-            ? Kirigami.Theme.positiveTextColor
-            : Kirigami.Theme.negativeTextColor
-        border.width: 1
-        Text {
-            anchors.centerIn: parent
-            text: "G"
-            font.pixelSize: parent.width * 0.65
-            font.bold: true
-            color: compact.provider === "cuda"
-                ? Kirigami.Theme.positiveTextColor
-                : Kirigami.Theme.negativeTextColor
-        }
+        text: (compact.provider === "cuda" || compact.provider === "cpu") ? "G" : "C"
+        font.pixelSize: Math.max(8, Math.min(parent.width, parent.height) * 0.45)
+        font.bold: true
+        color: compact.provider === "cuda" ? "#27ae60"
+             : compact.provider === "cpu"  ? "#c0392b"
+             : "#3498db"
     }
 
     // Global dim when passive so the active instance stays the visually
