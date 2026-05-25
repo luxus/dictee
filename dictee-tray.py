@@ -1518,14 +1518,18 @@ class DicteeTrayQt:
             self._watcher.addPath(path)
 
     def _provider_suffix(self):
-        """Retourne un badge unicode coloré : 🟢 cuda, 🔴 cpu*, '' inconnu.
-        Ajouté à la fin du label daemon (après ■) — pareil que le badge
-        rond du plasmoid full representation.
+        """Retourne un badge unicode coloré ajouté au label daemon :
+        🟢 GPU (cuda) | 🔴 panne CPU (cpu = libs CUDA cassées) |
+        🔵 CPU voulu (cpu-forced / cpu-only / cpu-int8). '' si inconnu.
+        Le menu Qt n'affiche pas de lettre colorée → on garde des cercles
+        (cohérent en COULEUR avec le badge plasmoid).
         """
         if self.provider == "cuda":
-            return " \U0001F7E2"  # 🟢 large green circle
-        if self.provider in ("cpu", "cpu-forced", "cpu-only"):
-            return " \U0001F534"  # 🔴 large red circle
+            return " \U0001F7E2"  # 🟢 GPU
+        if self.provider == "cpu":
+            return " \U0001F534"  # 🔴 panne (GPU indisponible)
+        if self.provider in ("cpu-forced", "cpu-only", "cpu-int8"):
+            return " \U0001F535"  # 🔵 CPU voulu
         return ""
 
     def _apply_provider(self):
