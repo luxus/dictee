@@ -254,6 +254,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if use_canary { "Canary AED" } else { "Parakeet TDT" },
         &model_dir
     );
+    // Log the encoder variant being loaded. int8 is otherwise invisible: it is
+    // read into a buffer rather than mmap'd, so it never appears in
+    // /proc/<pid>/maps the way the fp32 encoder-model.onnx.data file does.
+    // Mirrors the candidate order in ParakeetTDTModel::find_encoder.
+    if !use_canary {
+        let dir = Path::new(&model_dir);
+        let encoder_file = if force_cpu_int8 {
+            "encoder-model.int8.onnx"
+        } else if dir.join("encoder-model.onnx").exists() {
+            "encoder-model.onnx"
+        } else {
+            "encoder.onnx"
+        };
+        eprintln!(
+            "[dictee] Parakeet encoder: {} ({})",
+            encoder_file,
+            if force_cpu_int8 { "int8" } else { "fp32" }
+        );
+    }
 
     let mut backend = if use_canary {
         AsrBackend::Canary(Canary::from_pretrained(
