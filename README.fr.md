@@ -247,7 +247,7 @@ curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | b
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --gpu
 
 # Épingler une version précise
-curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.4
+curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.5
 
 # Non interactif
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --non-interactive
@@ -260,22 +260,22 @@ Téléchargez depuis [Releases](../../releases).
 **Ubuntu / Debian (CPU) :**
 
 ```bash
-sudo apt install ./dictee-cpu_1.3.4_amd64.deb
+sudo apt install ./dictee-cpu_1.3.5_amd64.deb
 ```
 
 **Ubuntu / Debian (GPU) :** nécessite le dépôt APT CUDA NVIDIA — voir [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup) pour la configuration unique, puis :
 
 ```bash
-sudo apt install ./dictee-cuda_1.3.4_amd64.deb
+sudo apt install ./dictee-cuda_1.3.5_amd64.deb
 ```
 
 **Fedora / openSUSE (CPU) :**
 
 ```bash
-sudo dnf install ./dictee-cpu-1.3.4-1.x86_64.rpm
+sudo dnf install ./dictee-cpu-1.3.5-1.x86_64.rpm
 ```
 
-**Fedora / openSUSE (GPU) :** ajoutez d'abord le dépôt CUDA (voir [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), puis `dictee-cuda-1.3.4-1.x86_64.rpm`.
+**Fedora / openSUSE (GPU) :** ajoutez d'abord le dépôt CUDA (voir [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), puis `dictee-cuda-1.3.5-1.x86_64.rpm`.
 
 **Arch Linux (AUR) :** `PKGBUILD` à la racine du dépôt (x86_64 + aarch64). Clonez + `makepkg -si`.
 
@@ -284,8 +284,8 @@ sudo dnf install ./dictee-cpu-1.3.4-1.x86_64.rpm
 **Autres distros (tarball) :**
 
 ```bash
-tar xzf dictee-1.3.4_amd64.tar.gz
-cd dictee-1.3.4
+tar xzf dictee-1.3.5_amd64.tar.gz
+cd dictee-1.3.5
 sudo ./install.sh
 ```
 
@@ -406,7 +406,16 @@ Pour les rapports de bugs et contournements, voir [Troubleshooting](https://gith
 
 ## Feuille de route
 
-**v1.3.4 (actuelle)** — **Transcription découpée universelle + durcissement UX de `dictee-transcribe`** :
+**v1.3.5 (actuelle)** — **Corrections push-to-talk + fiabilité** :
+- **Correction de la saisie push-to-talk** ([#8](https://github.com/rcspam/dictee/issues/8)) — le dernier caractère ne se répète plus après un moment de dictée, sur les configurations à plusieurs claviers ou sous Wayland.
+- **Push-to-talk avec outils de remapping** ([#10](https://github.com/rcspam/dictee/issues/10)) — les remappeurs de clavier comme logiops, keyd et kanata peuvent désormais déclencher la dictée, avec une nouvelle option dans les réglages.
+- **Téléchargements de modèles plus sûrs** — un téléchargement interrompu est maintenant détecté, au lieu de laisser un modèle corrompu qui échouait silencieusement au démarrage suivant.
+- **Whisper plus fiable** — meilleure sélection automatique CPU/GPU et moins de mots inventés dans la transcription.
+- **Plus réactif sur CPU** — meilleures performances par défaut, et le modèle Parakeet compact tourne désormais là où il est le plus rapide.
+- **Widget de bureau plus léger** — consommation CPU réduite au repos.
+- **Et des corrections plus petites** — réglages mieux conservés, compatibilité Fedora élargie, et diarisation des locuteurs plus stable.
+
+**v1.3.4** — **Transcription découpée universelle + durcissement UX de `dictee-transcribe`** :
 - **Transcription découpée universelle** dans `dictee-transcribe` — les fichiers de toute durée sont désormais découpés automatiquement en chunks de 180 s sur tout hôte (CPU et GPU). Nouveau cap par backend sur la durée de dictée live (Canary 2:30, Parakeet 4:30 ; Whisper / Vosk sans cap) pour éviter les crashes silencieux.
 - **Durcissement de 5 points UI ciblés par onglet** dans `dictee-transcribe` — éditeur de texte, panneau de renommage, markers timeline, swap audio du lecteur, et rendu de la transcription ne mettent désormais à jour l'UI globale que si l'onglet cible est visible. Plus de corruption cross-onglet quand on transcrit un fichier tout en relisant un autre.
 - **Statuts de skip traduction visibles** — les cas de skip silencieux affichent désormais un message de statut coloré (i18n en 6 langues : fr / de / es / it / pt / uk).

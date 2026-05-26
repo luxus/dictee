@@ -247,7 +247,7 @@ curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | b
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --gpu
 
 # Pin a specific version
-curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.4
+curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --version 1.3.5
 
 # Non-interactive
 curl -fsSL https://raw.githubusercontent.com/rcspam/dictee/master/install.sh | bash -s -- --non-interactive
@@ -260,22 +260,22 @@ Download from [Releases](../../releases).
 **Ubuntu / Debian (CPU):**
 
 ```bash
-sudo apt install ./dictee-cpu_1.3.4_amd64.deb
+sudo apt install ./dictee-cpu_1.3.5_amd64.deb
 ```
 
 **Ubuntu / Debian (GPU):** requires the NVIDIA CUDA APT repo — see [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup) for the one-time setup, then:
 
 ```bash
-sudo apt install ./dictee-cuda_1.3.4_amd64.deb
+sudo apt install ./dictee-cuda_1.3.5_amd64.deb
 ```
 
 **Fedora / openSUSE (CPU):**
 
 ```bash
-sudo dnf install ./dictee-cpu-1.3.4-1.x86_64.rpm
+sudo dnf install ./dictee-cpu-1.3.5-1.x86_64.rpm
 ```
 
-**Fedora / openSUSE (GPU):** add the CUDA repo first (see [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), then `dictee-cuda-1.3.4-1.x86_64.rpm`.
+**Fedora / openSUSE (GPU):** add the CUDA repo first (see [GPU-Setup](https://github.com/rcspam/dictee/wiki/GPU-Setup)), then `dictee-cuda-1.3.5-1.x86_64.rpm`.
 
 **Arch Linux (AUR):** `PKGBUILD` in the repo root (x86_64 + aarch64). Clone + `makepkg -si`.
 
@@ -284,8 +284,8 @@ sudo dnf install ./dictee-cpu-1.3.4-1.x86_64.rpm
 **Other distros (tarball):**
 
 ```bash
-tar xzf dictee-1.3.4_amd64.tar.gz
-cd dictee-1.3.4
+tar xzf dictee-1.3.5_amd64.tar.gz
+cd dictee-1.3.5
 sudo ./install.sh
 ```
 
@@ -422,7 +422,16 @@ For bug reports and workarounds, see [Troubleshooting](https://github.com/rcspam
 
 ## Roadmap
 
-**v1.3.4 (current)** — **Universal chunked transcription + `dictee-transcribe` UX hardening**:
+**v1.3.5 (current)** — **Push-to-talk fixes + reliability**:
+- **Push-to-talk typing fix** ([#8](https://github.com/rcspam/dictee/issues/8)) — the last character no longer repeats itself after dictating for a while, on setups with several keyboards or on Wayland.
+- **Push-to-talk with remapping tools** ([#10](https://github.com/rcspam/dictee/issues/10)) — keyboard remappers like logiops, keyd and kanata can now trigger dictation, with a new option in the settings.
+- **Safer model downloads** — an interrupted download is now detected instead of leaving a broken model that failed silently the next time you started dictee.
+- **More reliable Whisper** — better automatic CPU/GPU selection and fewer made-up words in the transcription.
+- **Snappier on CPU** — better out-of-the-box performance, and the compact Parakeet model now runs where it's fastest.
+- **Lighter desktop widget** — lower CPU usage when idle.
+- **Plus smaller fixes** — settings carried over more reliably, wider Fedora compatibility, and steadier speaker diarization.
+
+**v1.3.4** — **Universal chunked transcription + `dictee-transcribe` UX hardening**:
 - **Universal chunked transcription** in `dictee-transcribe` — files of any length now split automatically into 180 s chunks on every host (CPU and GPU). New per-backend cap on live-dictation recording duration (Canary 2:30, Parakeet 4:30; Whisper / Vosk uncapped) to prevent silent crashes.
 - **Five-site target-tab UI hardening** in `dictee-transcribe` — text editor, rename panel, timeline markers, audio player swap, and transcription render now only update the global UI when the target tab is visible. No more cross-tab corruption when transcribing one file while reviewing another.
 - **Translate skip surfacing** — silent translate-skip cases now show a colored status message (i18n in 6 languages: fr / de / es / it / pt / uk).
