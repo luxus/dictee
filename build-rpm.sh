@@ -212,7 +212,7 @@ build_rpm_cuda() {
     prepare_buildroot "$buildroot"
 
     # ONNX Runtime CUDA libs (load-dynamic: libonnxruntime.so not in target/release)
-    echo "Copie des libs CUDA ONNX Runtime..."
+    echo "Copying CUDA ONNX Runtime libs..."
     mkdir -p "$buildroot/usr/lib/dictee"
 
     # Search paths for libonnxruntime.so (not produced by load-dynamic build)
