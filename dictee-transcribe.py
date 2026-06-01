@@ -3908,8 +3908,12 @@ class TranscribeWindow(QDialog):
         self._diarize_worker = None
         self._progress.setVisible(False)
         self._lbl_status.setText(msg)
+        self._lbl_status.setVisible(True)
         self._transcription_in_progress = False
         self._update_transcribe_btn()
+        # Stop the tab spinner — otherwise it keeps spinning forever on an
+        # empty/failed diarization (e.g. "Empty transcription from daemon").
+        self._stop_all_spinners()
 
     # === Chunked long-file pipeline slots ===
 
@@ -3985,6 +3989,7 @@ class TranscribeWindow(QDialog):
             self._segments = []
             self._refresh_rename_panel_for_target()
             self._update_translate_btn()
+            self._stop_all_spinners()
             return
 
         self._retry_done = False
@@ -4153,6 +4158,7 @@ class TranscribeWindow(QDialog):
             self._transcription_in_progress = False
             self._update_transcribe_btn()
             self._update_translate_btn()
+            self._stop_all_spinners()
             return
 
         if not raw_output:
@@ -4164,6 +4170,7 @@ class TranscribeWindow(QDialog):
             self._transcription_in_progress = False
             self._update_transcribe_btn()
             self._update_translate_btn()
+            self._stop_all_spinners()
             return
 
         # Reset retry flag on success
