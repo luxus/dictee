@@ -29,10 +29,53 @@ static TEMP_WAV: LazyLock<String> = LazyLock::new(|| user_path("transcribe_recor
 static TEMP_CONVERTED: LazyLock<String> = LazyLock::new(|| user_path("transcribe_converted.wav"));
 static TEMP_STDIN: LazyLock<String> = LazyLock::new(|| user_path("transcribe_stdin_input"));
 
+/// Parsed command-line arguments for transcribe-client.
+#[derive(Debug, Default)]
+struct ClientArgs {
+    help: bool,
+    json_timestamps: bool,
+    /// Optional positional audio file. None means stdin or mic mode.
+    audio: Option<String>,
+}
+
+/// Parse argv into [`ClientArgs`], rejecting unknown options loudly so a flag
+/// the binary does not implement can never be silently ignored or mistaken for
+/// the audio path. The daemon socket is resolved separately (SOCKET_PATH:
+/// $DICTEE_TRANSCRIBE_SOCKET then $XDG_RUNTIME_DIR).
+fn parse_client_args(args: &[String]) -> Result<ClientArgs, String> {
+    let mut out = ClientArgs::default();
+    let mut i = 1; // skip argv[0]
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => out.help = true,
+            "--json-timestamps" => out.json_timestamps = true,
+            s if s.starts_with('-') => {
+                return Err(format!("unknown option '{}'", s));
+            }
+            s => {
+                if out.audio.is_some() {
+                    return Err(format!("unexpected extra argument '{}'", s));
+                }
+                out.audio = Some(s.to_string());
+            }
+        }
+        i += 1;
+    }
+    Ok(out)
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
+    let parsed = match parse_client_args(&args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("transcribe-client: {}", e);
+            eprintln!("Try 'transcribe-client --help' for usage.");
+            std::process::exit(2);
+        }
+    };
 
-    if args.iter().any(|a| a == "--help" || a == "-h") {
+    if parsed.help {
         eprintln!("transcribe-client - Client de transcription (fichier, stdin, micro)");
         eprintln!();
         eprintln!("Usage:");
@@ -50,11 +93,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let json_timestamps = args.iter().any(|a| a == "--json-timestamps");
+    let json_timestamps = parsed.json_timestamps;
 
     // Mode 1: Direct file path provided
-    if args.len() > 1 && !args[1].starts_with('-') {
-        let audio_path = resolve_path(&args[1])?;
+    if let Some(audio) = parsed.audio.as_deref() {
+        let audio_path = resolve_path(audio)?;
         let (wav_path, needs_cleanup) = ensure_wav(&audio_path)?;
         let result = if json_timestamps {
             let raw = send_to_daemon_with_mode(&wav_path, "timestamps")?;
@@ -435,5 +478,55 @@ fn send_to_daemon(audio_path: &str) -> Result<String, Box<dyn std::error::Error>
         Err(response.into())
     } else {
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod arg_tests {
+    use super::*;
+
+    fn argv(extra: &[&str]) -> Vec<String> {
+        std::iter::once("transcribe-client")
+            .chain(extra.iter().copied())
+            .map(String::from)
+            .collect()
+    }
+
+    #[test]
+    fn audio_then_json_timestamps() {
+        let p = parse_client_args(&argv(&["rec.wav", "--json-timestamps"])).unwrap();
+        assert_eq!(p.audio.as_deref(), Some("rec.wav"));
+        assert!(p.json_timestamps);
+    }
+
+    #[test]
+    fn json_timestamps_then_audio() {
+        let p = parse_client_args(&argv(&["--json-timestamps", "rec.wav"])).unwrap();
+        assert_eq!(p.audio.as_deref(), Some("rec.wav"));
+        assert!(p.json_timestamps);
+    }
+
+    #[test]
+    fn bare_audio_path() {
+        let p = parse_client_args(&argv(&["rec.wav"])).unwrap();
+        assert_eq!(p.audio.as_deref(), Some("rec.wav"));
+        assert!(!p.json_timestamps);
+    }
+
+    #[test]
+    fn no_args_is_mic_mode() {
+        let p = parse_client_args(&argv(&[])).unwrap();
+        assert_eq!(p.audio, None);
+        assert!(!p.json_timestamps);
+    }
+
+    #[test]
+    fn unknown_flag_is_rejected() {
+        assert!(parse_client_args(&argv(&["--bogus"])).is_err());
+    }
+
+    #[test]
+    fn help_flag_is_parsed() {
+        assert!(parse_client_args(&argv(&["--help"])).unwrap().help);
     }
 }
