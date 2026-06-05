@@ -1566,13 +1566,20 @@ VOSK_MODELS = {
     "ja": "vosk-model-small-ja-0.22",
 }
 
+# Curated list — only models that transcribe reliably in dictee's current
+# faster-whisper 1.2.1 / CTranslate2 stack. Excluded on purpose:
+#   - large-v3 AND large-v3-turbo: broken under faster-whisper inference
+#     (no punctuation/capitalization, drops the onset; reproduced on CPU AND
+#     GPU, all compute types; medium is fine with the same call). NOT a bad
+#     conversion (a fresh openai→ct2 4.7.1 reconversion reproduces it). They
+#     return once Whisper moves to a whisper.cpp/ggml backend, where large-v3
+#     transcribes correctly.
+#   - distil-large-v3: English-only, unsuited to multilingual dictation.
+# Do NOT re-add them here (regression of commit 10242f7).
 WHISPER_MODELS = [
     ("tiny", "tiny — 39M, fastest, lowest quality"),
     ("small", "small — 244M, good balance"),
     ("medium", "medium — 769M, better quality"),
-    ("large-v3-turbo", "large-v3-turbo — 809M, fast, multilingual"),
-    ("large-v3", "large-v3 — 1.5B, best quality, multilingual"),
-    ("Systran/faster-distil-whisper-large-v3", "distil-large-v3 — 756M, fast (English only)"),
 ]
 
 
@@ -16889,7 +16896,7 @@ class DicteeSetupDialog(QDialog):
                              "to fetch at least one Vosk language model — without it, "
                              "Vosk cannot transcribe anything.")
                 else:  # whisper
-                    hint = _("Now pick a Whisper model (small / turbo / large-v3…) and "
+                    hint = _("Now pick a Whisper model (tiny / small / medium) and "
                              "click Download — Whisper cannot transcribe until at least "
                              "one model is downloaded.")
                 QMessageBox.information(
@@ -16949,7 +16956,7 @@ class DicteeSetupDialog(QDialog):
             if not self._any_model_installed("whisper"):
                 return False, _(
                     "Whisper is installed, but no model has been downloaded.\n\n"
-                    "Pick a Whisper model (small / turbo / large-v3…) and click Download.")
+                    "Pick a Whisper model (tiny / small / medium) and click Download.")
             if whisper_model and not self._whisper_model_cached(whisper_model):
                 return False, _(
                     "The Whisper model « {model} » is not downloaded yet.\n\n"
