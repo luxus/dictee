@@ -8,6 +8,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
 use std::path::Path;
+use std::time::Duration;
 
 macro_rules! dbg_print {
     ($debug:expr, $($arg:tt)*) => {
@@ -324,6 +325,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
+                // Guard against a client that connects but never sends its
+                // request line: without a read timeout it would block the
+                // single-threaded accept loop and hang the whole UI.
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
                 let reader = BufReader::new(&stream);
                 if let Some(Ok(line)) = reader.lines().next() {
                     let line = line.trim().to_string();
