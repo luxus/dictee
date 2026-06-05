@@ -587,7 +587,8 @@ def read_state():
         with open(STATE_FILE, "r") as f:
             state = f.read().strip()
             if state in ("recording", "transcribing", "diarizing", "preparing",
-                         "diarize-ready", "switching", "offline"):
+                         "diarize-ready", "switching", "offline",
+                         "meeting-ui-open", "meeting-recording"):
                 return state
             if state in ("cancelled", "idle"):
                 return "idle"
