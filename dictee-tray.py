@@ -597,6 +597,47 @@ def read_state():
     return None
 
 
+def _read_version():
+    """Return the version of the tray code that is actually running.
+
+    In a source checkout (dev: /usr/bin/dictee-tray is symlinked into the
+    repo), resolve the symlink and read Cargo.toml + the current git short
+    hash, so the About reflects the exact code running — not a previously
+    installed package. In a real install, fall back to the
+    /usr/share/dictee/VERSION file shipped by every package target.
+    """
+    real_dir = os.path.dirname(os.path.realpath(__file__))
+    cargo = os.path.join(real_dir, "Cargo.toml")
+    if os.path.isfile(cargo):
+        ver = None
+        try:
+            with open(cargo) as cf:
+                for line in cf:
+                    if line.startswith("version"):
+                        ver = line.split("=", 1)[1].strip().strip('"')
+                        break
+        except OSError:
+            pass
+        if ver:
+            try:
+                out = subprocess.run(
+                    ["git", "-C", real_dir, "rev-parse", "--short", "HEAD"],
+                    capture_output=True, text=True, timeout=2,
+                ).stdout.strip()
+                return f"{ver} (dev {out})" if out else f"{ver} (dev)"
+            except Exception:
+                return f"{ver} (dev)"
+    for vpath in ("/usr/share/dictee/VERSION",
+                  os.path.join(real_dir, "VERSION")):
+        if os.path.isfile(vpath):
+            try:
+                with open(vpath) as vf:
+                    return vf.read().strip()
+            except OSError:
+                pass
+    return "dev"
+
+
 def _detect_backend():
     """Détecte le backend à utiliser : 'appindicator' ou 'qt'."""
     desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
@@ -793,6 +834,10 @@ class DicteeTrayAppIndicator:
         item_reset = Gtk.MenuItem(label=_("! Reset"))
         item_reset.connect("activate", lambda _: self._reset())
         self.menu.append(item_reset)
+
+        item_about = Gtk.MenuItem(label=_("About Dictée"))
+        item_about.connect("activate", lambda _: self._show_about_gtk())
+        self.menu.append(item_about)
 
         item_quit = Gtk.MenuItem(label=_("Quit icon"))
         item_quit.connect("activate", lambda _: self.Gtk.main_quit())
@@ -1023,6 +1068,19 @@ class DicteeTrayAppIndicator:
 
     def _delayed_daemon_refresh(self):
         self._check_daemon()
+
+    def _show_about_gtk(self):
+        ver = _read_version()
+        dialog = self.Gtk.AboutDialog()
+        dialog.set_program_name("Dictée")
+        dialog.set_version(ver)
+        dialog.set_comments(
+            _("Voice dictation for Linux (Parakeet / Vosk / Whisper)."))
+        dialog.set_website("https://github.com/rcspam/dictee")
+        dialog.set_website_label("github.com/rcspam/dictee")
+        dialog.set_copyright("© rcspam")
+        dialog.run()
+        dialog.destroy()
         self._check_state()
         self._apply_state()
         return False  # one-shot
@@ -1237,6 +1295,7 @@ class DicteeTrayQt:
         self.action_setup = self.menu.addAction(_("Configure Dictée"))
         self.menu.addSeparator()
         self.action_reset = self.menu.addAction(_("! Reset"))
+        self.action_about = self.menu.addAction(_("About Dictée"))
         self.action_quit = self.menu.addAction(_("Quit icon"))
         self.menu.triggered.connect(self._on_menu_triggered)
         # Refresh toggles from dictee.conf each time the menu is about to show,
@@ -1282,8 +1341,24 @@ class DicteeTrayQt:
             _spawn_detached(["dictee-setup"])
         elif action == self.action_reset:
             self._reset()
+        elif action == self.action_about:
+            self._show_about()
         elif action == self.action_quit:
             self.app.quit()
+
+    def _show_about(self):
+        from PyQt6.QtWidgets import QMessageBox
+        ver = _read_version()
+        QMessageBox.about(
+            None,
+            _("About Dictée"),
+            _("<b>Dictée</b> {ver}<br><br>"
+              "Voice dictation for Linux "
+              "(Parakeet / Vosk / Whisper).<br>"
+              "<a href='https://github.com/rcspam/dictee'>"
+              "github.com/rcspam/dictee</a><br><br>"
+              "Maintained by rcspam.").format(ver=ver),
+        )
 
     def _on_activated(self, reason):
         if reason == self.QSystemTrayIcon.ActivationReason.Trigger:
