@@ -287,14 +287,12 @@ msgstr ""
 "Мікрофон → «Перевірити налаштування порогу»."
 
 #: dictee-setup.py:1969
-#, fuzzy
 msgid ""
 "Multilingual transcription (25 languages, ~2.5 GB) — best accuracy, "
 "recommended for GPU"
-msgstr "Багатомовна транскрипція (25 мов, ~2,5 ГБ)"
+msgstr ""
 
 #: dictee-setup.py:1971
-#, fuzzy
 msgid ""
 "<b>Parakeet-TDT 0.6B v3 — FP32</b><br><br>Full-precision variant of the main "
 "transcription model.<br>FastConformer encoder + Token-and-Duration "
@@ -305,14 +303,6 @@ msgid ""
 "<code>transcribe-daemon</code>, <code>transcribe-diarize</code>, "
 "<code>dictee</code>"
 msgstr ""
-"<b>Parakeet-TDT 0.6B v3</b> — Основна модель транскрипції<br><br>Енкодер "
-"FastConformer + декодер Token-and-Duration Transducer (TDT).<br>Підтримує "
-"<b>25 мов</b>, включаючи французьку, англійську, іспанську, німецьку тощо."
-"<br>Вбудована пунктуація та великі літери (без постобробки)."
-"<br><br><b>Обов'язковий</b> для всіх режимів транскрипції (диктант, "
-"пакетний, daemon).<br>Використовується: <code>transcribe</code>, "
-"<code>transcribe-daemon</code>, <code>transcribe-diarize</code>, "
-"<code>dictee</code>"
 
 #: dictee-setup.py:1994
 msgid "Quantized variant (~670 MB) — recommended for CPU and low-VRAM GPU"
@@ -1161,9 +1151,8 @@ msgid "LLM"
 msgstr "LLM"
 
 #: dictee-setup.py:5676 dictee-setup.py:5861
-#, fuzzy
 msgid "Live meeting"
-msgstr "Зустріч"
+msgstr ""
 
 #: dictee-setup.py:5677
 msgid "LLM Diarization"
@@ -1184,9 +1173,8 @@ msgid ""
 msgstr ""
 
 #: dictee-setup.py:5871
-#, fuzzy
 msgid "Save folder:"
-msgstr "Помилка збереження"
+msgstr ""
 
 #: dictee-setup.py:5879
 msgid "Browse..."
@@ -1209,9 +1197,8 @@ msgid "Show window on all virtual desktops"
 msgstr ""
 
 #: dictee-setup.py:5927
-#, fuzzy
 msgid "Select meeting save folder"
-msgstr "Тримати режим зустрічі активним"
+msgstr ""
 
 #: dictee-setup.py:5991
 msgid "Source tree / git checkout"
@@ -1326,9 +1313,8 @@ msgstr ""
 "коротких або технічних слів на початку речень."
 
 #: dictee-setup.py:6373
-#, fuzzy
 msgid "Context duration:"
-msgstr "Тривалість контексту (секунди):"
+msgstr ""
 
 #: dictee-setup.py:6374
 msgid ""
@@ -1412,9 +1398,8 @@ msgid "LibreTranslate (local)"
 msgstr "LibreTranslate (локально)"
 
 #: dictee-setup.py:6705
-#, fuzzy
 msgid "Ollama (local LLM)"
-msgstr "ollama (локальний)"
+msgstr ""
 
 #: dictee-setup.py:6706
 msgid "Google (cloud — sends text to Google)"
@@ -1425,23 +1410,21 @@ msgid "Bing (cloud — sends text to Microsoft)"
 msgstr ""
 
 #: dictee-setup.py:6710
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Translation: {backend}"
-msgstr "Поточний бекенд перекладу"
+msgstr ""
 
 #: dictee-setup.py:6712
-#, fuzzy
 msgid "Translation: disabled — click Configure to enable"
-msgstr "Помилка перекладу — перевірте налаштування backend."
+msgstr ""
 
 #: dictee-setup.py:6720 dictee-setup.py:6728
 msgid "Test available after Finish (Vosk/Whisper require system daemon)"
 msgstr ""
 
 #: dictee-setup.py:6730
-#, fuzzy
 msgid "No translation backend selected"
-msgstr "Немає результату перекладу."
+msgstr ""
 
 #: dictee-setup.py:6770 dictee-setup.py:6784
 msgid "Model required"
@@ -1487,9 +1470,8 @@ msgstr ""
 "Натисніть 'Виправити' вище."
 
 #: dictee-setup.py:6832
-#, fuzzy
 msgid "Docker required"
-msgstr " (обов'язковий)"
+msgstr ""
 
 #: dictee-setup.py:6833
 msgid ""
@@ -1502,9 +1484,8 @@ msgid ""
 msgstr ""
 
 #: dictee-setup.py:6840
-#, fuzzy
 msgid "Docker permissions required"
-msgstr "Docker: доступ заборонено"
+msgstr ""
 
 #: dictee-setup.py:6841
 msgid ""
@@ -1515,9 +1496,8 @@ msgid ""
 msgstr ""
 
 #: dictee-setup.py:6848
-#, fuzzy
 msgid "Ollama required"
-msgstr " (обов'язковий)"
+msgstr ""
 
 #: dictee-setup.py:6849
 msgid ""
@@ -1527,9 +1507,8 @@ msgid ""
 msgstr ""
 
 #: dictee-setup.py:6861
-#, fuzzy
 msgid "Disable translation and continue"
-msgstr "Увімкнути постобробку"
+msgstr ""
 
 #: dictee-setup.py:6863
 msgid "Go back"
@@ -1540,13 +1519,11 @@ msgid "Speak freely, type instantly"
 msgstr "Говоріть вільно, друкуйте миттєво"
 
 #: dictee-setup.py:6981
-#, fuzzy, python-format
+#, python-format
 msgid ""
 "100% local voice dictation for Linux with 25+ languages, translation, and "
 "real-time visual feedback."
 msgstr ""
-"Повністю локальне голосове введення для Linux з 25+ мовами, перекладом та "
-"візуальним зворотним зв'язком у реальному часі."
 
 #: dictee-setup.py:7027
 msgid "with CUDA"
@@ -1566,9 +1543,8 @@ msgid "GPU"
 msgstr ""
 
 #: dictee-setup.py:7051
-#, fuzzy
 msgid "No NVIDIA GPU detected — CPU mode"
-msgstr "GPU не виявлено — ollama використовуватиме CPU (повільніше)."
+msgstr ""
 
 #: dictee-setup.py:7052
 #, python-brace-format
@@ -1581,19 +1557,17 @@ msgid "Desktop: {de}"
 msgstr ""
 
 #: dictee-setup.py:7054
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "System language: {lang}"
-msgstr "Тест як: {lang}"
+msgstr ""
 
 #: dictee-setup.py:7057
-#, fuzzy
 msgid "ASR backend:"
-msgstr "Модуль ASR"
+msgstr ""
 
 #: dictee-setup.py:7059
-#, fuzzy
 msgid "KDE plasmoid widget enabled"
-msgstr "Віджет KDE Plasma (панель)"
+msgstr ""
 
 #: dictee-setup.py:7061
 msgid "System tray (no plasmoid on this desktop)"
@@ -1626,14 +1600,12 @@ msgid "Detected on your machine:"
 msgstr ""
 
 #: dictee-setup.py:7116
-#, fuzzy
 msgid "Recommended setup:"
-msgstr "Рекомендовано"
+msgstr ""
 
 #: dictee-setup.py:7179
-#, fuzzy
 msgid "No local translation backend installed"
-msgstr "Зовнішній сервіс перекладу не потрібен"
+msgstr ""
 
 #: dictee-setup.py:7180
 #, python-format
@@ -1699,9 +1671,9 @@ msgid "Speaker diarization with Sortformer add-on"
 msgstr "Діаризація мовців з додатком Sortformer"
 
 #: dictee-setup.py:7367 dictee-setup.py:7381
-#, fuzzy, python-format
+#, python-format
 msgid "100% local, no internet needed"
-msgstr "Повністю локально, інтернет не потрібен"
+msgstr ""
 
 #: dictee-setup.py:7370
 msgid "9 languages available"
@@ -1720,9 +1692,9 @@ msgid "Ideal for older or low-resource machines"
 msgstr "Ідеально для старих або маломічних комп'ютерів"
 
 #: dictee-setup.py:7374
-#, fuzzy, python-format
+#, python-format
 msgid "100% local, CPU only"
-msgstr "Повністю локально, лише CPU"
+msgstr ""
 
 #: dictee-setup.py:7377
 msgid "99 languages (widest coverage)"
@@ -1753,9 +1725,9 @@ msgid "Excellent accuracy, comparable to Parakeet"
 msgstr "Чудова точ��ість, порівнянна з Parakeet"
 
 #: dictee-setup.py:7391
-#, fuzzy, python-format
+#, python-format
 msgid "100% local, requires NVIDIA GPU (6+ Go VRAM)"
-msgstr "100% локально, потрібен NVIDIA GPU (6+ ГБ VRAM)"
+msgstr ""
 
 #: dictee-setup.py:7431
 msgid ""
@@ -1782,9 +1754,9 @@ msgid "Configure the keyboard shortcuts for voice dictation."
 msgstr "Налаштуйте комбінації клавіш для голосового диктування."
 
 #: dictee-setup.py:7612 dictee-setup.py:7622
-#, fuzzy, python-format
+#, python-format
 msgid "100% local, no data sent to the internet"
-msgstr "100% локально, дані не надсилаються в інтернет"
+msgstr ""
 
 #: dictee-setup.py:7613
 msgid "Runs in Docker, automatic setup"
@@ -1879,9 +1851,8 @@ msgid "Direct: transcribe-client | trans -b :en"
 msgstr "Напряму: transcribe-client | trans -b :en"
 
 #: dictee-setup.py:7692 dictee-setup.py:9680
-#, fuzzy
 msgid "No translation (configure later if needed)"
-msgstr "Налаштування не потрібне"
+msgstr ""
 
 #: dictee-setup.py:7703
 msgid "Built-in translation (25 languages to/from English)"
@@ -1950,9 +1921,8 @@ msgid "dotool"
 msgstr "dotool"
 
 #: dictee-setup.py:8014
-#, fuzzy
 msgid "Configure translation"
-msgstr "Тестувати переклад"
+msgstr ""
 
 #: dictee-setup.py:8015
 msgid "Go back to the translation page to change settings"
@@ -2094,9 +2064,8 @@ msgid "Voice commands cheatsheet"
 msgstr "Шпаргалка голосових команд"
 
 #: dictee-setup.py:8351 dictee-setup.py:16049
-#, fuzzy
 msgid "Super + same key"
-msgstr "Окрема клавіша"
+msgstr ""
 
 #: dictee-setup.py:8401
 msgid ""
@@ -2153,9 +2122,8 @@ msgid "No GPU detected — running on CPU regardless of this toggle."
 msgstr ""
 
 #: dictee-setup.py:8658
-#, fuzzy
 msgid "Requires Parakeet-TDT 0.6B v3 (FP32 or int8) to be installed first"
-msgstr "Потрібно спочатку встановити Parakeet-TDT 0.6B v3"
+msgstr ""
 
 #: dictee-setup.py:8663 dictee-setup.py:8842 dictee-setup.py:9096
 #: dictee-setup.py:9398 dictee-setup.py:9461 dictee-setup.py:16809
@@ -2240,9 +2208,8 @@ msgid "Performance profile:"
 msgstr ""
 
 #: dictee-setup.py:9189
-#, fuzzy
 msgid "Auto (detected)"
-msgstr "GPU виявлено"
+msgstr ""
 
 #: dictee-setup.py:9190
 msgid "Ultra (beam=5)"
@@ -2710,19 +2677,14 @@ msgid "Disable reasoning (faster on qwen3, deepseek-r1, etc.)"
 msgstr ""
 
 #: dictee-setup.py:11277
-#, fuzzy
 msgid ""
 "Reasoning models emit a long <think>...</think> block before the answer. "
 "Disable for push-to-talk dictation where latency matters more than nuance."
 msgstr ""
-"Моделі міркування (qwen3, deepseek-r1) видають довгий блок <think>…</think> "
-"перед відповіддю. Вимкніть для профілів аналізу, де потрібна відповідь "
-"безпосередньо."
 
 #: dictee-setup.py:11284
-#, fuzzy
 msgid "Default (model)"
-msgstr "Модель за замовчуванням:"
+msgstr ""
 
 #: dictee-setup.py:11295
 msgid ""
@@ -3456,14 +3418,11 @@ msgid "Translating…"
 msgstr "Переклад…"
 
 #: dictee-setup.py:15910
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid ""
 "Key '{key}' is not supported. Use a function key (F1-F24), the backtick (`) "
 "or a special key (Home, End, Insert, etc.)."
 msgstr ""
-"Ця клавіша використовується для набору тексту. Віддайте перевагу "
-"функціональній клавіші (F1-F12) або спеціальній клавіші (Home, End, Insert "
-"тощо)."
 
 #: dictee-setup.py:15926
 #, python-brace-format
@@ -3495,14 +3454,10 @@ msgid "{name}  [internal — always blocked]"
 msgstr "{name}  [внутрішня — завжди заблокована]"
 
 #: dictee-setup.py:16014
-#, fuzzy
 msgid ""
 "This key is used for typing. Prefer a function key (F1-F24), the backtick "
 "(`) or a special key (Home, End, Insert, etc.)."
 msgstr ""
-"Ця клавіша використовується для набору тексту. Віддайте перевагу "
-"функціональній клавіші (F1-F12) або спеціальній клавіші (Home, End, Insert "
-"тощо)."
 
 #: dictee-setup.py:16022
 msgid "Escape is used to cancel dictation. Choose another key."
@@ -4050,32 +4005,28 @@ msgid "Start the server with {n} languages ({langs})?"
 msgstr "Запустити сервер з {n} мовами ({langs})?"
 
 #: dictee-tray.py:248
-#, fuzzy
 msgid "Force CPU (loses GPU acceleration)"
-msgstr "Середовище: CUDA активна (прискорення GPU)"
+msgstr ""
 
 #: dictee-tray.py:250
 msgid "Force CPU"
 msgstr ""
 
 #: dictee-tray.py:251
-#, fuzzy
 msgid "Force CPU (no GPU anyway)"
-msgstr "Примусово CPU (звільнити VRAM GPU)"
+msgstr ""
 
 #: dictee-tray.py:253
-#, fuzzy
 msgid "GPU active"
-msgstr "GPU виявлено"
+msgstr ""
 
 #: dictee-tray.py:255
 msgid "GPU active (low VRAM)"
 msgstr ""
 
 #: dictee-tray.py:256
-#, fuzzy
 msgid "No GPU detected"
-msgstr "GPU виявлено"
+msgstr ""
 
 #: dictee-tray.py:274
 msgid "Canary requires NVIDIA GPU (encoder too heavy for CPU)"
@@ -4094,9 +4045,8 @@ msgid "Parakeet INT8 is CPU-optimized (GPU is 5× slower)"
 msgstr ""
 
 #: dictee-tray.py:292
-#, fuzzy
 msgid "No NVIDIA GPU detected"
-msgstr "GPU виявлено"
+msgstr ""
 
 # === dictee-tray ===
 #: dictee-tray.py:688 dictee-tray.py:967 dictee-tray.py:1168
@@ -4144,9 +4094,8 @@ msgstr ""
 "перекладу."
 
 #: dictee-tray.py:781 dictee-tray.py:1252
-#, fuzzy
 msgid "Force CPU (no GPU)"
-msgstr "Примусово CPU (звільнити VRAM GPU)"
+msgstr ""
 
 #: dictee-tray.py:804 dictee-tray.py:1271
 msgid "Configure Dictée"
@@ -4158,7 +4107,7 @@ msgstr "! Скинути"
 
 #: dictee-tray.py:814 dictee-tray.py:1274 dictee-tray.py:1330
 msgid "About Dictée"
-msgstr ""
+msgstr "Про Dictée"
 
 #: dictee-tray.py:818 dictee-tray.py:1275
 msgid "Quit icon"
@@ -4194,7 +4143,7 @@ msgstr "Зупинити диктант"
 
 #: dictee-tray.py:1054
 msgid "Voice dictation for Linux (Parakeet / Vosk / Whisper)."
-msgstr ""
+msgstr "Голосове диктування для Linux (Parakeet / Vosk / Whisper)."
 
 #: dictee-tray.py:1135 dictee-tray.py:1508
 msgid "Dictation — offline"
@@ -4211,6 +4160,9 @@ msgid ""
 "Whisper).<br><a href='https://github.com/rcspam/dictee'>github.com/rcspam/"
 "dictee</a><br><br>Maintained by rcspam."
 msgstr ""
+"<b>Dictée</b> {ver}<br><br>Голосове диктування для Linux (Parakeet / Vosk / "
+"Whisper).<br><a href='https://github.com/rcspam/dictee'>github.com/rcspam/"
+"dictee</a><br><br>Супроводжує rcspam."
 
 #: dictee-tray.py:1507
 msgid "Dictation — ready"
@@ -4251,1197 +4203,3 @@ msgid ""
 msgstr ""
 "Dictée ще не налаштовано.\n"
 "Бажаєте запустити майстер налаштування?"
-
-#~ msgid ""
-#~ "Now pick a Whisper model (small / turbo / large-v3…) and click Download — "
-#~ "Whisper cannot transcribe until at least one model is downloaded."
-#~ msgstr ""
-#~ "Тепер оберіть модель Whisper (small / turbo / large-v3…) та натисніть "
-#~ "Завантажити — Whisper не може транскрибувати, доки не завантажено "
-#~ "принаймні одну модель."
-
-#~ msgid ""
-#~ "Whisper is installed, but no model has been downloaded.\n"
-#~ "\n"
-#~ "Pick a Whisper model (small / turbo / large-v3…) and click Download."
-#~ msgstr ""
-#~ "Whisper встановлено, але жодної моделі не завантажено.\n"
-#~ "\n"
-#~ "Оберіть модель Whisper (small / turbo / large-v3…) та натисніть "
-#~ "Завантажити."
-
-# === dictee-tray ===
-#~ msgid "Start diarization"
-#~ msgstr "Почати діаризацію"
-
-#, fuzzy
-#~ msgid "Start live meeting transcription"
-#~ msgstr "Перезапуск демона для транскрипції…"
-
-#~ msgid ""
-#~ "Meeting mode with speaker identification. Recommended for short "
-#~ "recordings (< 5 min)."
-#~ msgstr ""
-#~ "Режим зустрічі з ідентифікацією мовців. Рекомендовано для коротких "
-#~ "записів (< 5 хв)."
-
-#~ msgid "Sortformer model not installed. Configure in dictee-setup."
-#~ msgstr "Модель Sortformer не встановлено. Налаштуйте в dictee-setup."
-
-#~ msgid "When unchecked, meeting mode is disabled after each recording."
-#~ msgstr "Якщо вимкнено, режим зустрічі вимикається після кожного запису."
-
-#~ msgid "Speaker identification (max 4). Switches to Parakeet automatically."
-#~ msgstr ""
-#~ "Ідентифікація мовців (макс. 4). Автоматично перемикається на Parakeet."
-
-#, fuzzy
-#~ msgid "Chunk duration (seconds):"
-#~ msgstr "Тривалість контексту (секунди):"
-
-#~ msgid "Audio files"
-#~ msgstr "Аудіофайли"
-
-#~ msgid "Daemon socket not available after 15s"
-#~ msgstr "Сокет демона недоступний після 15с"
-
-#~ msgid "No speaker segments detected"
-#~ msgstr "Сегментів мовців не виявлено"
-
-#~ msgid "Empty transcription from daemon"
-#~ msgstr "Порожня транскрипція від демона"
-
-#~ msgid "UNKNOWN"
-#~ msgstr "НЕВІДОМИЙ"
-
-#~ msgid "Could not determine audio duration"
-#~ msgstr "Не вдалося визначити тривалість аудіо"
-
-#, fuzzy, python-brace-format
-#~ msgid "Phase 1/{n}: pre-cut audio"
-#~ msgstr "Фаза 1/4: попередня нарізка аудіо"
-
-#~ msgid "No chunks produced from audio split"
-#~ msgstr "З розділення аудіо не отримано фрагментів"
-
-#, fuzzy, python-brace-format
-#~ msgid "Phase 2/{n}: global diarization"
-#~ msgstr "Фаза 2/4: глобальна діаризація"
-
-#, fuzzy, python-brace-format
-#~ msgid "Phase {p}/{n}: chunked transcription"
-#~ msgstr "Фаза 3/4: поетапна транскрипція"
-
-#~ msgid "No transcription tokens produced"
-#~ msgstr "Не отримано токенів транскрипції"
-
-#, fuzzy, python-brace-format
-#~ msgid "Phase 4/{n}: merging speakers"
-#~ msgstr "Фаза 4/4: об'єднання мовців"
-
-#~ msgid "Merge produced empty output"
-#~ msgstr "Об'єднання дало порожній результат"
-
-#, fuzzy
-#~ msgid "Empty transcription output"
-#~ msgstr "Порожня транскрипція від демона"
-
-#~ msgid "Search..."
-#~ msgstr "Пошук..."
-
-#~ msgid "Translation partially failed — some segments untranslated."
-#~ msgstr "Переклад частково не вдався — деякі сегменти не перекладено."
-
-#~ msgid "Translation failed — check backend configuration."
-#~ msgstr "Помилка перекладу — перевірте налаштування backend."
-
-#~ msgid "Export"
-#~ msgstr "Експорт"
-
-#, python-brace-format
-#~ msgid "Tab: <b>{name}</b>"
-#~ msgstr "Вкладка: <b>{name}</b>"
-
-#~ msgid "Formats"
-#~ msgstr "Формати"
-
-#~ msgid "Plain text (.txt)"
-#~ msgstr "Звичайний текст (.txt)"
-
-#~ msgid "SRT (.srt)"
-#~ msgstr "SRT (.srt)"
-
-#~ msgid "JSON (.json)"
-#~ msgstr "JSON (.json)"
-
-#~ msgid "Filename prefix:"
-#~ msgstr "Префікс імені файлу:"
-
-#~ msgid "Directory:"
-#~ msgstr "Тека:"
-
-#~ msgid "Select directory"
-#~ msgstr "Обрати теку"
-
-#~ msgid "Export LLM result"
-#~ msgstr "Експорт результату LLM"
-
-#~ msgid "Filename:"
-#~ msgstr "Ім'я файлу:"
-
-#~ msgid "Markdown (.md)"
-#~ msgstr "Markdown (.md)"
-
-#~ msgid "PDF (.pdf)"
-#~ msgstr "PDF (.pdf)"
-
-#~ msgid "Filename is required."
-#~ msgstr "Ім'я файлу обов'язкове."
-
-#, python-brace-format
-#~ msgid "Directory does not exist: {dir}"
-#~ msgstr "Тека не існує: {dir}"
-
-#~ msgid "Pick at least one format."
-#~ msgstr "Оберіть принаймні один формат."
-
-#, python-brace-format
-#~ msgid ""
-#~ "Could not write {path}:\n"
-#~ "{err}"
-#~ msgstr ""
-#~ "Не вдалося записати {path}:\n"
-#~ "{err}"
-
-#~ msgid "Export OK"
-#~ msgstr "Експорт OK"
-
-#~ msgid "Wrote:\n"
-#~ msgstr "Записано:\n"
-
-#~ msgid "LLM analysis"
-#~ msgstr "Аналіз LLM"
-
-#~ msgid "LLM module error"
-#~ msgstr "Помилка модуля LLM"
-
-#, python-brace-format
-#~ msgid ""
-#~ "Could not load profiles:\n"
-#~ "{err}"
-#~ msgstr ""
-#~ "Не вдалося завантажити профілі:\n"
-#~ "{err}"
-
-#~ msgid "Profile:"
-#~ msgstr "Профіль:"
-
-#~ msgid "Provider:"
-#~ msgstr "Постачальник:"
-
-#~ msgid "Generate"
-#~ msgstr "Згенерувати"
-
-#~ msgid "Close"
-#~ msgstr "Закрити"
-
-#, python-brace-format
-#~ msgid "Couldn't auto-load models ({err}). Click Refresh."
-#~ msgstr ""
-#~ "Не вдалося автоматично завантажити моделі ({err}). Натисніть Оновити."
-
-#, python-brace-format
-#~ msgid "{n} model(s) loaded from {name}."
-#~ msgstr "Завантажено моделей з {name}: {n}."
-
-#~ msgid "Pick a provider first."
-#~ msgstr "Спочатку оберіть постачальника."
-
-#, python-brace-format
-#~ msgid "Loading models from {name}…"
-#~ msgstr "Завантаження моделей з {name}…"
-
-#, python-brace-format
-#~ msgid "{n} model(s) loaded."
-#~ msgstr "Завантажено моделей: {n}."
-
-#~ msgid "Profile, provider and model are required."
-#~ msgstr "Профіль, постачальник і модель обов'язкові."
-
-#~ msgid "Profile or provider not found."
-#~ msgstr "Профіль або постачальника не знайдено."
-
-#~ msgid "No transcript available. Run a transcription first, then retry."
-#~ msgstr ""
-#~ "Транскрипт недоступний. Спочатку виконайте транскрипцію, потім спробуйте "
-#~ "ще раз."
-
-#~ msgid "Generating…"
-#~ msgstr "Генерація…"
-
-#, python-brace-format
-#~ msgid "Generating… {i}/{n}"
-#~ msgstr "Генерація… {i}/{n}"
-
-#~ msgid "Dictee - Transcribe file"
-#~ msgstr "Dictee — Транскрибувати файл"
-
-#~ msgid "Dictee - First run"
-#~ msgstr "Dictee — Перший запуск"
-
-#~ msgid "Dictee is not yet configured."
-#~ msgstr "Dictee ще не налаштовано."
-
-#~ msgid ""
-#~ "Before transcribing audio files, you need to configure the speech "
-#~ "recognition engine and other settings.\n"
-#~ "\n"
-#~ "Would you like to open the configuration wizard?"
-#~ msgstr ""
-#~ "Перед транскрипцією аудіофайлів потрібно налаштувати систему "
-#~ "розпізнавання мовлення та інші параметри.\n"
-#~ "\n"
-#~ "Бажаєте відкрити майстер налаштування?"
-
-#~ msgid "File:"
-#~ msgstr "Файл:"
-
-#~ msgid "Select an audio file..."
-#~ msgstr "Оберіть аудіофайл..."
-
-#~ msgid "Path to the audio file to transcribe"
-#~ msgstr "Шлях до аудіофайлу для транскрипції"
-
-#~ msgid "Open file selection dialog"
-#~ msgstr "Відкрити діалог вибору файлу"
-
-#~ msgid "Go to the start"
-#~ msgstr "Перейти на початок"
-
-#~ msgid "Play / Pause"
-#~ msgstr "Відтворення / Пауза"
-
-#~ msgid "Previous speaker segment"
-#~ msgstr "Попередній сегмент"
-
-#~ msgid "Next speaker segment"
-#~ msgstr "Наступний сегмент"
-
-#~ msgid "Go to the end"
-#~ msgstr "Перейти в кінець"
-
-#~ msgid "Diarization (speaker identification)"
-#~ msgstr "Діаризація (ідентифікація мовців)"
-
-#~ msgid ""
-#~ "Identify speakers (max 4). Works on any duration thanks to the auto-"
-#~ "chunking pipeline."
-#~ msgstr ""
-#~ "Ідентифікувати мовців (макс. 4). Працює з будь-якою тривалістю завдяки "
-#~ "конвеєру автоматичної нарізки."
-
-#~ msgid "Threshold:"
-#~ msgstr "Поріг:"
-
-#~ msgid ""
-#~ "Speaker detection threshold. ← Low: more sensitive, detects more speakers "
-#~ "(may split one person into two speakers). → High: stricter, detects fewer "
-#~ "speakers (may merge two people into one speaker). Default (50%) works "
-#~ "well for most recordings."
-#~ msgstr ""
-#~ "Поріг виявлення мовців. ← Низький: чутливіший, виявляє більше мовців "
-#~ "(може розділити одну особу на двох мовців). → Високий: суворіший, виявляє "
-#~ "менше мовців (може об'єднати двох осіб в одного мовця). Значення за "
-#~ "замовчуванням (50%) добре працює для більшості записів."
-
-#~ msgid "Format:"
-#~ msgstr "Формат:"
-
-#~ msgid "Plain text"
-#~ msgstr "Звичайний текст"
-
-#~ msgid "Output format for transcription"
-#~ msgstr "Формат виводу транскрипції"
-
-#~ msgid "Transcribe"
-#~ msgstr "Транскрибувати"
-
-#~ msgid "Start transcription of the selected file"
-#~ msgstr "Почати транскрипцію обраного файлу"
-
-#~ msgid "Cancel the long-file chunked pipeline"
-#~ msgstr "Скасувати поетапний конвеєр для довгих файлів"
-
-#~ msgid "Auto-translate the transcription"
-#~ msgstr "Автоматично перекласти транскрипцію"
-
-#~ msgid "Automatically translate after transcription"
-#~ msgstr "Автоматично перекладати після транскрипції"
-
-#~ msgid "Follow playback in text"
-#~ msgstr "Слідкувати за відтворенням у тексті"
-
-#~ msgid "Move text cursor in real time during audio playback"
-#~ msgstr "Переміщати курсор тексту в реальному часі під час відтворення аудіо"
-
-#~ msgid "Auto-play on text click"
-#~ msgstr "Автовідтворення при клацанні на тексті"
-
-#~ msgid "Start playback when clicking on a segment in the text"
-#~ msgstr "Почати відтворення при клацанні на сегменті в тексті"
-
-#~ msgid "Highlight current segment"
-#~ msgstr "Підсвічувати поточний сегмент"
-
-#~ msgid "Underline the segment matching the audio position"
-#~ msgstr "Підкреслювати сегмент, що відповідає поточній позиції аудіо"
-
-#~ msgid "Google (cloud)"
-#~ msgstr "Google (хмара)"
-
-#~ msgid "Translate to:"
-#~ msgstr "Перекласти на:"
-
-#~ msgid "Backend settings…"
-#~ msgstr "Налаштування бекенду…"
-
-#~ msgid "Translate"
-#~ msgstr "Перекласти"
-
-#~ msgid "Translate the current transcription"
-#~ msgstr "Перекласти поточну транскрипцію"
-
-#~ msgid ""
-#~ "Click-to-seek: when enabled, clicking in the text seeks the audio and the "
-#~ "text is read-only. Toggle off to edit the text freely (no audio seek)."
-#~ msgstr ""
-#~ "Click-to-seek: якщо увімкнено, клацання в тексті переміщує аудіо, а текст "
-#~ "доступний лише для читання. Вимкніть, щоб редагувати текст вільно (без "
-#~ "переміщення аудіо)."
-
-#~ msgid "Press the pencil to edit."
-#~ msgstr "Натисніть на олівець для редагування."
-
-#~ msgid "Ctrl+F to search, Ctrl+Z to undo"
-#~ msgstr "Ctrl+F для пошуку, Ctrl+Z для скасування"
-
-#~ msgid "Original"
-#~ msgstr "Оригінал"
-
-#~ msgid "LLM analysis..."
-#~ msgstr "Аналіз LLM…"
-
-#~ msgid ""
-#~ "Run an LLM analysis on the transcript (summary, chapters, ASR correction, "
-#~ "custom prompt)"
-#~ msgstr ""
-#~ "Запустити аналіз LLM на транскрипції (підсумок, глави, виправлення ASR, "
-#~ "користувацький запит)"
-
-#~ msgid "Copy all"
-#~ msgstr "Копіювати все"
-
-#~ msgid "Copy the entire text to the clipboard"
-#~ msgstr "Копіювати весь текст у буфер обміну"
-
-#~ msgid "Close this window"
-#~ msgstr "Закрити це вікно"
-
-#~ msgid "Select audio file"
-#~ msgstr "Обрати аудіофайл"
-
-#~ msgid "● Modified"
-#~ msgstr "● Змінено"
-
-#~ msgid "Sync positions refreshed after edits."
-#~ msgstr "Позиції синхронізації оновлено після правок."
-
-#~ msgid "File not found."
-#~ msgstr "Файл не знайдено."
-
-#~ msgid "Transcription results will appear here..."
-#~ msgstr "Результати транскрипції з'являться тут..."
-
-#, python-brace-format
-#~ msgid "Command '{cmd}' not found. Install dictee first."
-#~ msgstr "Команду «{cmd}» не знайдено. Спочатку встановіть dictee."
-
-#~ msgid "Transcription timed out (5 min)."
-#~ msgstr "Транскрипція прострочена (5 хв)."
-
-#~ msgid "Audio file not found for phase 2."
-#~ msgstr "Аудіофайл не знайдено для фази 2."
-
-#~ msgid "Waiting for daemon..."
-#~ msgstr "Очікування демона…"
-
-#, python-brace-format
-#~ msgid "Transcribing {done}/{total}..."
-#~ msgstr "Транскрипція {done}/{total}…"
-
-#, fuzzy
-#~ msgid "Chunked transcription"
-#~ msgstr "Фаза 3/4: поетапна транскрипція"
-
-#, fuzzy, python-brace-format
-#~ msgid "{base} — chunk {done}/{total}"
-#~ msgstr "Фаза 3/4: фрагмент {done}/{total}"
-
-#~ msgid "Cancelling..."
-#~ msgstr "Скасування…"
-
-#~ msgid "GPU memory full — unloading translation model and retrying..."
-#~ msgstr ""
-#~ "Памʼять GPU повна — вивантаження моделі перекладу і повторна спроба…"
-#~ "Пам'ять GPU заповнена — вивантаження моделі перекладу та повторна "
-#~ "спроба..."
-
-#, python-brace-format
-#~ msgid ""
-#~ "Transcription failed (code {code}). Check memory, backend, or audio file."
-#~ msgstr ""
-#~ "Помилка транскрипції (код {code}). Перевірте пам'ять, backend або "
-#~ "аудіофайл."
-
-#, python-brace-format
-#~ msgid "{n} speaker(s)"
-#~ msgstr "{n} мовець(ів)"
-
-#, python-brace-format
-#~ msgid "audio {dur}"
-#~ msgstr "аудіо {dur}"
-
-#, python-brace-format
-#~ msgid "transcribed in {t}"
-#~ msgstr "транскрибовано за {t}"
-
-#, python-brace-format
-#~ msgid "translated in {t}"
-#~ msgstr "перекладено за {t}"
-
-#~ msgid "Translation skipped: no target language selected."
-#~ msgstr "Переклад пропущено: цільову мову не вибрано."
-
-#, python-brace-format
-#~ msgid ""
-#~ "Translation skipped: source language detected as {src} — select a "
-#~ "different target above."
-#~ msgstr ""
-#~ "Переклад пропущено: вихідну мову визначено як {src} — виберіть іншу "
-#~ "цільову мову вище."
-
-#~ msgid "Editable translation text. Ctrl+F to search, Ctrl+Z to undo."
-#~ msgstr ""
-#~ "Текст перекладу для редагування. Ctrl+F — пошук, Ctrl+Z — скасувати."
-
-#~ msgid "Rename speakers"
-#~ msgstr "Перейменувати спікерів"
-
-#~ msgid ""
-#~ "Replaces speaker labels in all views and exports (text, SRT, JSON). Does "
-#~ "not modify raw data."
-#~ msgstr ""
-#~ "Замінює мітки спікерів у всіх виглядах та експортах (текст, SRT, JSON). "
-#~ "Не змінює необроблені дані."
-
-#~ msgid "Reset"
-#~ msgstr "Скинути"
-
-#~ msgid ""
-#~ "Clears custom names and reverts to the generic labels Speaker 0, Speaker "
-#~ "1, etc."
-#~ msgstr ""
-#~ "Видаляє користувацькі імена і повертає загальні мітки Speaker 0, Speaker "
-#~ "1 тощо."
-
-#~ msgid "Nom (ex. Alice)"
-#~ msgstr "Ім'я (напр. Аліса)"
-
-#, python-brace-format
-#~ msgid "Copied {tab} to clipboard."
-#~ msgstr "{tab} скопійовано в буфер обміну."
-
-#~ msgid "Nothing to copy."
-#~ msgstr "Немає що копіювати."
-
-#~ msgid "Nothing to export."
-#~ msgstr "Немає що експортувати."
-
-#~ msgid "Tab"
-#~ msgstr "Вкладка"
-
-#~ msgid "Translating..."
-#~ msgstr "Переклад..."
-
-#~ msgid "Generating LLM analysis…"
-#~ msgstr "Генерація аналізу LLM…"
-
-#, python-brace-format
-#~ msgid "LLM: {profile}"
-#~ msgstr "LLM: {profile}"
-
-#, python-brace-format
-#~ msgid "Export directory does not exist: {dir}"
-#~ msgstr "Тека експорту не існує: {dir}"
-
-#, python-brace-format
-#~ msgid "Export failed: {error}"
-#~ msgstr "Помилка експорту: {error}"
-
-#, python-brace-format
-#~ msgid "Exported {n} file(s) to {dir}"
-#~ msgstr "Експортовано {n} файл(ів) до {dir}"
-
-#~ msgid ""
-#~ "Docker permissions are required for LibreTranslate.\n"
-#~ "Please click 'Fix permissions' above."
-#~ msgstr ""
-#~ "Для LibreTranslate потрібні дозволи Docker.\n"
-#~ "Натисніть 'Виправити дозволи' вище."
-
-#~ msgid "Same key + Ctrl + Alt"
-#~ msgstr "Та ж клавіша + Ctrl + Alt"
-
-#~ msgid ""
-#~ "Main transcription model. Required for all dictation modes. Supports 25 "
-#~ "languages with native punctuation and capitalization."
-#~ msgstr ""
-#~ "Основна модель транскрипції. Обов'язкова для всіх режимів диктування. "
-#~ "Підтримує 25 мов з вбудованою пунктуацією та капіталізацією."
-
-#, python-brace-format
-#~ msgid "Key '{key}' is not supported. Use a function key (F1-F12)."
-#~ msgstr ""
-#~ "Клавіша «{key}» не підтримується. Використовуйте функціональну клавішу "
-#~ "(F1-F12)."
-
-#~ msgid "English streaming (~2.5 GB)"
-#~ msgstr "Потокова англійська (~2,5 ГБ)"
-
-#~ msgid ""
-#~ "<b>Nemotron 0.6B</b> — English streaming model<br><br>Optimized for "
-#~ "<b>real-time English</b> transcription with low latency.<br>Processes "
-#~ "audio in streaming chunks instead of waiting for the full recording."
-#~ "<br><br><b>Optional</b> — only needed for English streaming + diarization "
-#~ "mode.<br>Used by: <code>transcribe-stream-diarize</code>"
-#~ msgstr ""
-#~ "<b>Nemotron 0.6B</b> — Потокова модель англійської<br><br>Оптимізовано "
-#~ "для <b>англійської транскрипції в реальному часі</b> з низькою затримкою."
-#~ "<br>Обробляє аудіо потоковими блоками замість очікування повного запису."
-#~ "<br><br><b>Необов'язковий</b> — потрібен лише для потокового англійського "
-#~ "режиму + діаризації.<br>Використовується: <code>transcribe-stream-"
-#~ "diarize</code>"
-
-#~ msgid "(optional, for Ollama Cloud)"
-#~ msgstr "(необов'язково, для Ollama Cloud)"
-
-#~ msgid ""
-#~ "Real-time English streaming with speaker diarization. English only. "
-#~ "Processes audio in live chunks for low-latency results. Optional — only "
-#~ "needed for live English transcription with speaker identification."
-#~ msgstr ""
-#~ "Потокова транскрипція англійської в реальному часі з діаризацією мовців. "
-#~ "Лише англійська. Обробляє аудіо потоковими блоками для результатів з "
-#~ "низькою затримкою. Необов'язковий — потрібен лише для потокової "
-#~ "англійської транскрипції з ідентифікацією мовців."
-
-#~ msgid "Tabs to export"
-#~ msgstr "Вкладки для експорту"
-
-#~ msgid "Source language"
-#~ msgstr "Мова джерела"
-
-#~ msgid "Target language"
-#~ msgstr "Цільова мова"
-
-#~ msgid "Configure..."
-#~ msgstr "Налаштувати..."
-
-#~ msgid "Open translation settings in dictee-setup"
-#~ msgstr "Відкрити налаштування перекладу в dictee-setup"
-
-#~ msgid "Export tab..."
-#~ msgstr "Експортувати вкладку…"
-
-#~ msgid "Export only the current tab"
-#~ msgstr "Експортувати лише активну вкладку"
-
-#~ msgid "Export all..."
-#~ msgstr "Експортувати все…"
-
-#~ msgid "Export all tabs to files"
-#~ msgstr "Експортувати всі вкладки у файли"
-
-#~ msgid ""
-#~ "<b>Que voyez-vous ici ?</b><br>Deux chaînes de traitement appliquées au "
-#~ "texte reconnu par l'ASR, dans l'ordre d'exécution de gauche à droite."
-#~ "<br><br><b>🔵 Diagramme bleu — Pipeline Normal</b><br>Appliqué au texte "
-#~ "dans la langue source (celle que vous dictez). Corrige la ponctuation, "
-#~ "les nombres, les règles de langue, le dictionnaire perso, la "
-#~ "capitalisation et peut finir par un passage LLM optionnel pour la "
-#~ "grammaire.<br><br><b>🟠 Diagramme orange — Pipeline Translation</"
-#~ "b><br>Appliqué une seule fois, <i>après</i> la traduction, sur le texte "
-#~ "déjà traduit, avec la langue cible comme référence. Le passage LLM est "
-#~ "toujours désactivé (les backends de traduction produisent déjà du texte "
-#~ "grammaticalement propre).<br><br><b>Comment interagir ?</b><br>• Cliquer "
-#~ "sur une étape l'active ou la désactive instantanément.<br>• Si l'étape a "
-#~ "sa propre page de configuration, le 1<sup>er</sup> clic y navigue, le "
-#~ "2<sup>e</sup> clic (depuis la page) la bascule.<br>• Les étapes grisées "
-#~ "sont inactives.<br>• L'ordre d'exécution est strict : une étape "
-#~ "désactivée est sautée, le texte passe à la suivante.<br><br><b>⚠ "
-#~ "Diarisation</b><br>Le mode diarisation (multi-locuteurs) ne passe pas par "
-#~ "ces pipelines : le texte brut est conservé tel quel pour préserver les "
-#~ "labels <code>[SPK1]</code>, <code>[SPK2]</code>… afin d'éviter qu'ils "
-#~ "soient dégradés par les règles typo / LLM."
-#~ msgstr ""
-#~ "<b>Що ви тут бачите?</b><br>Два конвеєри обробки, що застосовуються до "
-#~ "тексту, розпізнаного ASR, у порядку виконання зліва направо.<br><br><b>🔵 "
-#~ "Синя діаграма — Звичайний конвеєр</b><br>Застосовується до тексту мовою "
-#~ "джерела (тією, якою ви диктуєте). Виправляє пунктуацію, числа, мовні "
-#~ "правила, особистий словник, капіталізацію та може завершитися "
-#~ "необов'язковим проходом LLM для граматики.<br><br><b>🟠 Помаранчева "
-#~ "діаграма — Конвеєр перекладу</b><br>Застосовується один раз, <i>після</i> "
-#~ "перекладу, до вже перекладеного тексту, з цільовою мовою як орієнтиром. "
-#~ "Прохід LLM завжди вимкнений (бекенди перекладу вже видають граматично "
-#~ "чистий текст).<br><br><b>Як взаємодіяти?</b><br>• Клацання на кроці "
-#~ "миттєво вмикає або вимикає його.<br>• Якщо крок має власну сторінку "
-#~ "налаштувань, 1<sup>е</sup> клацання відкриває її, 2<sup>е</sup> клацання "
-#~ "(зі сторінки) перемикає його.<br>• Сірі кроки неактивні.<br>• Порядок "
-#~ "виконання суворий: вимкнений крок пропускається, текст переходить до "
-#~ "наступного.<br><br><b>⚠ Діаризація</b><br>Режим діаризації (мульти-"
-#~ "мовний) не проходить через ці конвеєри: сирий текст зберігається як є для "
-#~ "збереження міток <code>[SPK1]</code>, <code>[SPK2]</code>… щоб уникнути "
-#~ "їхнього пошкодження правилами типографіки / LLM."
-
-#~ msgid "Visualisation interactive des pipelines de post-traitement"
-#~ msgstr "Інтерактивна візуалізація конвеєрів постобробки"
-
-#~ msgid ""
-#~ "en mode multi-locuteurs, le texte brut est conservé tel quel (ni post-"
-#~ "processing, ni traduction, ni LLM) pour préserver les labels "
-#~ msgstr ""
-#~ "у мульти-мовному режимі сирий текст зберігається як є (без постобробки, "
-#~ "без перекладу, без LLM), щоб зберегти мітки "
-
-#~ msgid ""
-#~ "⚠ Trop bas → l'ASR peut halluciner sur le bruit de fond. Trop haut → "
-#~ "risque de couper les voix douces."
-#~ msgstr ""
-#~ "⚠ Надто низько → ASR може галюцинувати на фоновому шумі. Надто високо → "
-#~ "ризик обрізати тихі голоси."
-
-#~ msgid "Tester le réglage du seuil :"
-#~ msgstr "Перевірити налаштування порогу:"
-
-#~ msgid "Silence détecté — skippé"
-#~ msgstr "Виявлено тишу — пропущено"
-
-#~ msgid ""
-#~ "OFF : exécute le pipeline complet (tous les toggles actifs). ON : exécute "
-#~ "uniquement l'étape de la page actuellement ouverte, en forçant "
-#~ "temporairement les autres étapes à off. Ne modifie pas la config "
-#~ "persistante — utile pour voir l'effet d'une seule étape en isolation."
-#~ msgstr ""
-#~ "OFF: виконує повний конвеєр (усі активні перемикачі). ON: виконує лише "
-#~ "крок поточно відкритої сторінки, тимчасово примушуючи інші кроки до off. "
-#~ "Не змінює постійну конфігурацію — корисно для перегляду ефекту одного "
-#~ "кроку в ізоляції."
-
-#~ msgid ""
-#~ "OFF : teste le pipeline PP normal seul. ON : ajoute la traduction (+ PP "
-#~ "traduction si activé)."
-#~ msgstr ""
-#~ "OFF: перевіряє лише звичайний конвеєр PP. ON: додає переклад (+ PP "
-#~ "переклад, якщо активний)."
-
-#~ msgid "Non enregistré"
-#~ msgstr "Не збережено"
-
-#~ msgid "Renommer les locuteurs"
-#~ msgstr "Перейменувати мовців"
-
-#~ msgid "Appliquer"
-#~ msgstr "Застосувати"
-
-#~ msgid ""
-#~ "Remplace les libellés des locuteurs dans toutes les vues et exports "
-#~ "(texte, SRT, JSON). Ne modifie pas les données brutes."
-#~ msgstr ""
-#~ "Замінює мітки мовців у всіх вікнах і експортах (текст, SRT, JSON). Не "
-#~ "змінює сирі дані."
-
-#~ msgid "Réinitialiser"
-#~ msgstr "Скинути"
-
-#~ msgid ""
-#~ "Efface les noms personnalisés et revient aux libellés génériques Speaker "
-#~ "0, Speaker 1, etc."
-#~ msgstr ""
-#~ "Стирає користувацькі імена та повертає загальні мітки Speaker 0, Speaker "
-#~ "1 тощо."
-
-#~ msgid ""
-#~ "Cannot close this tab while a transcription/translation is running. "
-#~ "Cancel it first."
-#~ msgstr ""
-#~ "Неможливо закрити цю вкладку, поки виконується транскрипція/переклад. "
-#~ "Спочатку скасуйте її."
-
-#~ msgid "Speaker identification (diarization)"
-#~ msgstr "Ідентифікація мовців (діаризація)"
-
-#~ msgid ""
-#~ "Apply the short-text fix to translated text.\n"
-#~ "Useful when the translation backend capitalizes\n"
-#~ "single-word inputs: e.g. 'maison' → 'House' → 'house'."
-#~ msgstr ""
-#~ "Застосувати виправлення коротких текстів до перекладеного тексту.\n"
-#~ "Корисно, коли бекенд перекладу пише з великої літери\n"
-#~ "однослівні введення: напр. 'maison' → 'House' → 'house'."
-
-#~ msgid "Editable transcription text. Ctrl+F to search, Ctrl+Z to undo."
-#~ msgstr ""
-#~ "Редагований текст транскрипції. Ctrl+F для пошуку, Ctrl+Z для скасування."
-#~ "Текст транскрипції для редагування. Ctrl+F — пошук, Ctrl+Z — скасувати."
-
-#~ msgid ""
-#~ "Identify speakers (max 4). Recommended for recordings under 5 minutes."
-#~ msgstr ""
-#~ "Ідентифікувати мовців (макс. 4). Рекомендовано для записів до 5 хвилин."
-#~ "Ідентифікувати мовців (макс. 4). Рекомендовано для записів до 5 хвилин."
-
-#, python-brace-format
-#~ msgid ""
-#~ "⚠ Long file detected ({min} min). Diarization + transcription may fail on "
-#~ "a GPU with less than 10 GB of VRAM (out of memory). Consider splitting "
-#~ "your file and processing it in several passes, or disable diarization. "
-#~ "Automatic splitting will be available in v1.4."
-#~ msgstr ""
-#~ "⚠ Виявлено довгий файл ({min} хв). Діаризація + транскрипція може не "
-#~ "вдатися на GPU з менш ніж 10 ГБ VRAM (недостатньо пам'яті). Розгляньте "
-#~ "можливість розділити файл і обробляти його за кілька проходів, або "
-#~ "вимкніть діаризацію. Автоматичне розділення буде доступне у версії 1.4."
-
-#~ msgid "Options"
-#~ msgstr "Параметри"
-
-#~ msgid "Post-processing..."
-#~ msgstr "Постобробка..."
-
-#~ msgid ""
-#~ "Cliquer sur les boutons de la chaîne de traitement ci-dessous pour "
-#~ "activer/désactiver les post-traitements"
-#~ msgstr ""
-#~ "Натискайте кнопки ланцюжка обробки нижче, щоб увімкнути/вимкнути "
-#~ "постобробку"
-
-#, python-brace-format
-#~ msgid "Language(s) not available: {langs}"
-#~ msgstr "Мова(и) недоступна(і): {langs}"
-
-#, python-brace-format
-#~ msgid "Available: {langs}. Restart to add missing languages."
-#~ msgstr "Доступні: {langs}. Перезапустіть для додавання відсутніх мов."
-
-#~ msgid ""
-#~ "Post-processing disabled (master switch off) — text passed through "
-#~ "unchanged."
-#~ msgstr ""
-#~ "Постобробка вимкнена (головний перемикач вимкнено) — текст передається "
-#~ "без змін."
-
-#, fuzzy
-#~ msgid "Normal"
-#~ msgstr "Формати"
-
-#~ msgid ""
-#~ "Uses a local LLM (via ollama) to fix grammar,\n"
-#~ "spelling, accents and punctuation.\n"
-#~ "Configure the model and prompt in the LLM tab."
-#~ msgstr ""
-#~ "Використовує локальну LLM (через ollama) для виправлення граматики,\n"
-#~ "орфографії, акцентів і пунктуації.\n"
-#~ "Налаштуйте модель і запит на вкладці LLM."
-
-#~ msgid "Enable post-processing"
-#~ msgstr "Увімкнути постобробку"
-
-#, fuzzy
-#~ msgid "Also enable post-processing for translations"
-#~ msgstr "Увімкнути постобробку (правила regex + словник)"
-
-#, fuzzy
-#~ msgid "Translation post-process"
-#~ msgstr "Перевищено час очікування виконання постобробки"
-
-#, fuzzy
-#~ msgid "Strip final period added by the translation backend"
-#~ msgstr "Поточний backend перекладу"
-
-#~ msgid ""
-#~ "Replaces words using the dictionary.\n"
-#~ "Exact matching on word boundaries."
-#~ msgstr ""
-#~ "Замінює слова за допомогою словника.\n"
-#~ "Точний збіг на межах слів."
-
-#~ msgid ""
-#~ "Applies regex substitution rules to fix\n"
-#~ "common ASR errors (voice commands,\n"
-#~ "punctuation, formatting)."
-#~ msgstr ""
-#~ "Застосовує правила підстановки regex для виправлення\n"
-#~ "типових помилок ASR (голосові команди,\n"
-#~ "пунктуація, форматування)."
-
-#~ msgid ""
-#~ "Removes erroneous periods after continuation words\n"
-#~ "(articles, prepositions, conjunctions, pronouns, verbs)\n"
-#~ "to keep sentences flowing naturally across push-to-talk segments.\n"
-#~ "\n"
-#~ "Voice command: say your continuation keyword at the start\n"
-#~ "of a push to remove the previous punctuation and continue\n"
-#~ "in lowercase. The keyword is configurable per language\n"
-#~ "in the Continuation tab."
-#~ msgstr ""
-#~ "Видаляє помилкові крапки після слів продовження\n"
-#~ "(артиклі, прийменники, сполучники, займенники, дієслова)\n"
-#~ "для плавного переходу між сегментами push-to-talk.\n"
-#~ "\n"
-#~ "Голосова команда: скажіть ключове слово продовження на початку\n"
-#~ "натискання, щоб видалити попередню пунктуацію та продовжити\n"
-#~ "з малої літери. Ключове слово налаштовується для кожної мови\n"
-#~ "на вкладці Продовження."
-
-#~ msgid ""
-#~ "Capitalizes the first letter after sentence-ending\n"
-#~ "punctuation (. ! ?). Parakeet does this natively,\n"
-#~ "but post-processing rules may alter the text —\n"
-#~ "this ensures correct capitalization afterwards.\n"
-#~ "Essential for Vosk/Whisper backends."
-#~ msgstr ""
-#~ "Робить великою першу літеру після розділових знаків\n"
-#~ "кінця речення (. ! ?). Parakeet робить це нативно,\n"
-#~ "але правила постобробки можуть змінити текст —\n"
-#~ "це забезпечує правильну капіталізацію після них.\n"
-#~ "Необхідно для бекендів Vosk/Whisper."
-
-#~ msgid "~3 GB VRAM with Gemma 3 4B (+ ~2.5 GB Parakeet)"
-#~ msgstr "~3 ГБ VRAM з Gemma 3 4B (+ ~2,5 ГБ Parakeet)"
-
-#, python-brace-format
-#~ msgid "User rules in {path} — applied after system rules."
-#~ msgstr ""
-#~ "Правила користувача в {path} — застосовуються після системних правил."
-
-#~ msgid "Undo"
-#~ msgstr "Скасувати"
-
-#~ msgid "Redo"
-#~ msgstr "Повторити"
-
-#~ msgid "Rules"
-#~ msgstr "Правила"
-
-#, python-brace-format
-#~ msgid "Rejected: ASR detected Cyrillic instead of {lang}"
-#~ msgstr "Відхилено: ASR виявив кирилицю замість {lang}"
-
-#, python-brace-format
-#~ msgid "Rejected: ASR detected Latin instead of {lang}"
-#~ msgstr "Відхилено: ASR виявив латиницю замість {lang}"
-
-#~ msgid "Elisions [fr]"
-#~ msgstr "Елізії [fr]"
-
-#~ msgid "Elisions [it]"
-#~ msgstr "Елізії [it]"
-
-#~ msgid "Spanish [es]"
-#~ msgstr "Іспанська [es]"
-
-#~ msgid "Contractions [pt]"
-#~ msgstr "Скорочення [pt]"
-
-#~ msgid "German [de]"
-#~ msgstr "Німецька [de]"
-
-#~ msgid "Dutch [nl]"
-#~ msgstr "Нідерландська [nl]"
-
-#~ msgid "Romanian [ro]"
-#~ msgstr "Румунська [ro]"
-
-#~ msgid "Typography"
-#~ msgstr "Типографіка"
-
-#~ msgid "Startup services"
-#~ msgstr "Служби автозапуску"
-
-#~ msgid "Start transcription daemon at startup"
-#~ msgstr "Запускати daemon транскрипції при старті"
-
-#~ msgid ""
-#~ "Say this word at the start of a push-to-talk segment\n"
-#~ "to remove the previous punctuation and continue in lowercase.\n"
-#~ "\n"
-#~ "Example: \"I eat.\" + \"counterpoint some cheese\"\n"
-#~ "→ \"I eat some cheese\"\n"
-#~ "\n"
-#~ "Leave empty to disable."
-#~ msgstr ""
-#~ "Скажіть це слово на початку сегмента push-to-talk\n"
-#~ "щоб видалити попередню пунктуацію та продовжити з малої літери.\n"
-#~ "\n"
-#~ "Приклад: \"я їм.\" + \"контрапункт сир\"\n"
-#~ "→ \"я їм сир\"\n"
-#~ "\n"
-#~ "Залиште порожнім для вимкнення."
-
-#~ msgid "25 languages, ~2.5 GB, ~0.8s"
-#~ msgstr "25 мов, ~2,5 ГБ, ~0,8с"
-
-#~ msgid "9+ languages, ~50 MB, ~1.5s"
-#~ msgstr "9+ мов, ~50 МБ, ~1,5с"
-
-#~ msgid "lightweight"
-#~ msgstr "легкий"
-
-#~ msgid "99 languages, ~500 MB–3 GB, ~0.3s"
-#~ msgstr "99 мов, ~500 МБ–3 ГБ, ~0,3с"
-
-#~ msgid "GPU only"
-#~ msgstr "Лише GPU"
-
-#~ msgid "Re-download"
-#~ msgstr "Завантажити знову"
-
-#~ msgid ""
-#~ "Canary 1B v2 — 25 languages, GPU-accelerated transcription with built-in "
-#~ "translation (all languages ↔ English, 48 pairs).\n"
-#~ "No external translation service needed."
-#~ msgstr ""
-#~ "Canary 1B v2 — 25 мов, транскрипція з прискоренням GPU та вбудованим "
-#~ "перекладом (усі мови ↔ англійська, 48 пар).\n"
-#~ "Зовнішній сервіс перекладу не потрібен."
-
-#~ msgid "Download Canary model (~4.7 GB)"
-#~ msgstr "Завантажити модель Canary (~4,7 ГБ)"
-
-#~ msgid "Re-download Canary model"
-#~ msgstr "Перезавантажити модель Canary"
-
-#~ msgid "model downloaded and ready to use"
-#~ msgstr "модель завантажена та готова до використання"
-
-#~ msgid "downloaded"
-#~ msgstr "завантажено"
-
-#~ msgid "select a model and click 'Download' to install it"
-#~ msgstr "оберіть модель та натисніть «Завантажити» для встановлення"
-
-#~ msgid "Install"
-#~ msgstr "Встановити"
-
-#~ msgid "Hold (push-to-talk) — hold key to record, release to transcribe"
-#~ msgstr ""
-#~ "Утримувати (push-to-talk) — утримувати клавішу для запису, відпустити для "
-#~ "транскрибуванняУтримувати (push-to-talk) — утримувати клавішу для запису, "
-#~ "відпустити для транскрибуванняУтримання (push-to-talk) — утримувати для "
-#~ "запису, відпустити для транскрипції"
-
-#~ msgid "Toggle — press to start, press again to stop"
-#~ msgstr "Перемикання — натиснути для початку, натиснути знову для зупинки"
-
-#~ msgid "select a language and click 'Download' to install it"
-#~ msgstr "оберіть мову та натисніть «Завантажити» для встановлення"
-
-#~ msgid "Installing Canary packages…"
-#~ msgstr "Встановлення пакетів Canary…"
-
-#~ msgid "Canary is not installed. Please click 'Install Canary' above."
-#~ msgstr "Canary не встановлено. Натисніть «Встановити Canary» вище."
-
-#~ msgid "Download model"
-#~ msgstr "Завантажити модель"
-
-#~ msgid "(empty = auto-detect)"
-#~ msgstr "(порожнє = автовизначення)"
-
-#~ msgid "Install Canary environment (~1.5 GB)"
-#~ msgstr "Встановити середовище Canary (~1,5 ГБ)"
-
-#~ msgid "Canary environment installed"
-#~ msgstr "Середовище Canary встановлено"
-
-#~ msgid "Reinstall Canary environment"
-#~ msgstr "Перевстановити середовище Canary"
-
-#~ msgid "Canary environment not installed"
-#~ msgstr "Середовище Canary не встановлено"
-
-#~ msgid "Save the transcription to a file"
-#~ msgstr "Зберегти транскрипцію у файл"
-
-#~ msgid "ASR daemon"
-#~ msgstr "Бекенд ASR"
-
-#~ msgid "Same key + Alt (e.g., Alt+F9)"
-#~ msgstr "Та ж клавіша + Alt (напр., Alt+F9)"
-
-#~ msgid "Fuzzy matching (jellyfish)"
-#~ msgstr "Нечіткий збіг (jellyfish)"
-
-#~ msgid ""
-#~ "Tolerates small spelling variations from the ASR\n"
-#~ "using Jaro-Winkler string similarity (threshold 0.85).\n"
-#~ "Requires the jellyfish Python library.\n"
-#~ "Example: \"Gogle\" → \"Google\""
-#~ msgstr ""
-#~ "Допускає невеликі орфографічні варіації від ASR\n"
-#~ "за допомогою подібності рядків Jaro-Winkler (поріг 0.85).\n"
-#~ "Потребує бібліотеку Python jellyfish.\n"
-#~ "Приклад: \"Gogle\" → \"Google\""
-
-#~ msgid "Fix permissions (requires password)"
-#~ msgstr "Виправити дозволи (потрібен пароль)"
-
-#~ msgid "Docker"
-#~ msgstr "Docker"
-
-#~ msgid "User added to 'docker' group."
-#~ msgstr "Користувача додано до групи 'docker'."
-
-#~ msgid "You must log out and log back in for this to take effect."
-#~ msgstr "Потрібно вийти та увійти знову, щоб зміни набули чинності."
-
-#~ msgid ""
-#~ "Removes line break before continuation words\n"
-#~ "(conjunctions, adverbs, etc.) to keep\n"
-#~ "sentences flowing naturally."
-#~ msgstr ""
-#~ "Видаляє розрив рядка перед словами продовження\n"
-#~ "(сполучники, прислівники тощо), щоб речення\n"
-#~ "звучали природно."
-
-#~ msgid "Fetching latest release…"
-#~ msgstr "Отримання останньої версії…"
-
-#, python-brace-format
-#~ msgid "No {ext} found in the release."
-#~ msgstr "Не знайдено {ext} у релізі."
-
-#~ msgid "Fuzzy dictionary matching"
-#~ msgstr "Фонетичний пошук у словнику"
-
-#~ msgid "French-specific:"
-#~ msgstr "Специфічне для французької:"
-
-#~ msgid "Edit regex rules…"
-#~ msgstr "Редагувати правила regex…"
-
-#~ msgid "Edit dictionary…"
-#~ msgstr "Редагувати словник…"
-
-#~ msgid "Edit continuation words…"
-#~ msgstr "Редагувати слова продовження…"
-
-#~ msgid "Install Docker"
-#~ msgstr "Встановити Docker"
-
-#~ msgid "Package manager not detected. Install Docker manually."
-#~ msgstr "Менеджер пакетів не виявлено. Встановіть Docker вручну."
-
-#~ msgid "Installation failed."
-#~ msgstr "Помилка встановлення."
-
-#~ msgid ""
-#~ "The 'gh' tool (GitHub CLI) is required.\n"
-#~ "Install it: sudo apt install gh && gh auth login"
-#~ msgstr ""
-#~ "Потрібен інструмент 'gh' (GitHub CLI).\n"
-#~ "Встановити: sudo apt install gh && gh auth login"
-
-#~ msgid "Download error (.deb)"
-#~ msgstr "Помилка завантаження (.deb)"
-
-#~ msgid "No .deb found in the release."
-#~ msgstr ".deb не знайдено у випуску."
-
-#~ msgid "Download error (.tar.gz)"
-#~ msgstr "Помилка завантаження (.tar.gz)"
-
-#~ msgid "No .tar.gz found in the release."
-#~ msgstr ".tar.gz не знайдено у випуску."
-
-#~ msgid "Your user is not in the 'input' group. Run:"
-#~ msgstr "Ваш користувач не в групі «input». Виконайте:"
-
-#~ msgid "then log out and log back in."
-#~ msgstr "потім вийдіть і увійдіть знову."
-
-#~ msgid "(then log out and back in)"
-#~ msgstr "(потім вийдіть і увійдіть знову)"
-
-#, python-brace-format
-#~ msgid "Downloading language model: {src} → {tgt}…"
-#~ msgstr "Завантаження мовної моделі: {src} → {tgt}…"
-
-#~ msgid "Loading language models…"
-#~ msgstr "Завантаження мовних моделей…"
-
-#~ msgid "French elisions"
-#~ msgstr "Французькі елізії"
-
-#~ msgid "French typography (non-breaking spaces)"
-#~ msgstr "Французька типографіка (нерозривні пробіли)"
-
-#~ msgid "Install text2num"
-#~ msgstr "Встановити text2num"
-
-#~ msgid "Required for number conversion and fuzzy matching"
-#~ msgstr "Необхідно для перетворення чисел та фонетичного пошуку"
-
-#~ msgid "Download timed out (30 min)."
-#~ msgstr "Час завантаження вичерпано (30 хв)."
-
-#~ msgid "This wizard will guide you through the initial configuration."
-#~ msgstr "Цей майстер допоможе вам з початковим налаштуванням."
-
-#, python-brace-format
-#~ msgid "Detected environment: <b>{name}</b>"
-#~ msgstr "Виявлене середовище: <b>{name}</b>"
-
-#, python-brace-format
-#~ msgid ""
-#~ "Unsupported environment for automatic configuration.\n"
-#~ "Configure the shortcut manually in your window manager:\n"
-#~ "Command: <b>{cmd}</b>"
-#~ msgstr ""
-#~ "Середовище не підтримує автоматичне налаштування.\n"
-#~ "Налаштуйте комбінацію вручну у вашому менеджері вікон:\n"
-#~ "Команда: <b>{cmd}</b>"
-
-#~ msgid "No microphone detected"
-#~ msgstr "Мікрофон не виявлено"
-
-#, python-brace-format
-#~ msgid "Shortcut already used by '{name}'"
-#~ msgstr "Комбінація вже використовується '{name}'"
-
-#, python-brace-format
-#~ msgid "Shortcut applied: {key}"
-#~ msgstr "Комбінацію застосовано: {key}"
-
-#, python-brace-format
-#~ msgid "Shortcut error: {err}"
-#~ msgstr "Помилка комбінації: {err}"
-
-#~ msgid "transcribe-client not found"
-#~ msgstr "transcribe-client не знайдено"
-
-#~ msgid "Daemon stopped"
-#~ msgstr "Daemon зупинено"
-
-#~ msgid "click to stop"
-#~ msgstr "натисніть для зупинки"
