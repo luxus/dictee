@@ -568,13 +568,17 @@ mode_online() {
             fi
         fi
 
-        info "Cloning the dictee repository (master)..."
-        # Always clone master for Arch: PKGBUILD packaging fixes (orphan
-        # cleanup, dependency tweaks, .install hooks) must ship without a
-        # full version bump. The actual binary version is pinned in
-        # Cargo.toml on master, which makepkg picks up automatically.
-        # Other distros use the .deb / .rpm assets from the release tag.
-        git clone --depth 1 "https://github.com/${REPO}.git" dictee-src
+        info "Cloning the dictee repository (release/1.3)..."
+        # Clone the release/1.3 maintenance branch, NOT master: makepkg only
+        # reads the PKGBUILD from this checkout, then its source=() re-fetches
+        # the tagged tarball (archive/v$_tag.tar.gz). release/1.3 keeps the
+        # PKGBUILD pinned to the latest published stable (_tag=1.3.5), so that
+        # tarball always exists. master can sit ahead on an unreleased dev
+        # version (e.g. 1.4.0-beta) whose tag does not exist yet — cloning it
+        # would make makepkg fetch a 404 archive and abort (see issue #17).
+        # Packaging fixes ship by pushing to release/1.3 (re-cut), no master
+        # bump needed. Other distros use the .deb / .rpm assets from the tag.
+        git clone --depth 1 --branch release/1.3 "https://github.com/${REPO}.git" dictee-src
         cd dictee-src
 
         # Pre-build heads-up: makepkg compiles parakeet-rs (Rust+ONNX) from
