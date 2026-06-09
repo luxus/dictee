@@ -568,17 +568,21 @@ mode_online() {
             fi
         fi
 
-        info "Cloning the dictee repository (release/1.3)..."
-        # Clone the release/1.3 maintenance branch, NOT master: makepkg only
-        # reads the PKGBUILD from this checkout, then its source=() re-fetches
-        # the tagged tarball (archive/v$_tag.tar.gz). release/1.3 keeps the
-        # PKGBUILD pinned to the latest published stable (_tag=1.3.5), so that
-        # tarball always exists. master can sit ahead on an unreleased dev
-        # version (e.g. 1.4.0-beta) whose tag does not exist yet — cloning it
-        # would make makepkg fetch a 404 archive and abort (see issue #17).
-        # Packaging fixes ship by pushing to release/1.3 (re-cut), no master
-        # bump needed. Other distros use the .deb / .rpm assets from the tag.
-        git clone --depth 1 --branch release/1.3 "https://github.com/${REPO}.git" dictee-src
+        info "Cloning dictee at the latest release tag (${RELEASE_TAG})..."
+        # Clone the resolved release TAG ($RELEASE_TAG), NOT master. This
+        # mirrors what the deb/rpm/tarball paths already do — they pull assets
+        # from the release tag — so all four targets follow the same published
+        # release. The Arch path builds from source, so it clones the tag to
+        # read its PKGBUILD; makepkg then builds it via source=()
+        # (archive/v$_tag.tar.gz). Cloning the tag guarantees that archive
+        # exists: a published tag always has a downloadable archive, and the
+        # tag's PKGBUILD pins _tag to that same version. master must NOT be
+        # cloned — it can sit ahead on an unreleased dev version (e.g.
+        # 1.4.0-beta) whose tag does not exist yet, making makepkg fetch a 404
+        # archive and abort (issue #17). Tracking $RELEASE_TAG also means Arch
+        # follows the latest published release automatically, nothing
+        # hard-coded. $RELEASE_TAG is set above (latest stable, or --version).
+        git clone --depth 1 --branch "$RELEASE_TAG" "https://github.com/${REPO}.git" dictee-src
         cd dictee-src
 
         # Pre-build heads-up: makepkg compiles parakeet-rs (Rust+ONNX) from
