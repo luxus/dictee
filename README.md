@@ -424,9 +424,6 @@ For bug reports and workarounds, see [Troubleshooting](https://github.com/rcspam
 
 ## Roadmap
 
-**v1.3.6 (unreleased)** : **Fixes**
-- **Correct keyboard layout for typed accents** (addresses the layout aspect of [#19](https://github.com/rcspam/dictee/issues/19)): dictee now detects the active keyboard layout and variant (KDE via D-Bus, GNOME via gsettings) and drives dotool with it, so accented characters and umlauts are no longer dropped or scrambled when the active layout differs from the system default (e.g. a permanent `us+altgr-intl`). A manual `DOTOOL_XKB_LAYOUT` / `DOTOOL_XKB_VARIANT` in `dictee.conf` still takes precedence, for compositors without a queryable layout API (sway, Hyprland).
-
 **v1.3.5 (current)** — **Int8 Parakeet model + fixes + reliability**:
 - **New Int8 Parakeet model — snappier on CPU** — better out-of-the-box performance, with the compact Parakeet model now running where it's fastest.
 - **Clearer GPU/CPU switch** — the GPU/CPU toggle in settings now greys out and shows CPU whenever the GPU can't actually be used (no NVIDIA card, CPU-only build, or the int8 model), so it always reflects what really runs.
