@@ -209,15 +209,18 @@ _eitype_args() {
         if [ -n "${DOTOOL_XKB_VARIANT:-}" ] && [ "$DOTOOL_XKB_VARIANT" != "$DOTOOL_XKB_LAYOUT" ]; then
             args+=("--variant" "$DOTOOL_XKB_VARIANT")
         fi
+        # Pinned layout: skip eitype's qdbus KDE layout-index probe (Qt 6.11 SIGSEGV on exit).
+        args+=(--layout-index 0)
     fi
     printf '%s\0' "${args[@]}"
 }
 
 _eitype_run() {
-    command -v eitype >/dev/null 2>&1 || return 1
+    local eitype_cmd="${EITYPE:-eitype}"
+    command -v "$eitype_cmd" >/dev/null 2>&1 || return 1
     local -a args=()
     while IFS= read -r -d '' arg; do args+=("$arg"); done < <(_eitype_args)
-    eitype "${args[@]}" "$@"
+    "$eitype_cmd" "${args[@]}" "$@"
 }
 
 safe_eitype_key() {
