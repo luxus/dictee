@@ -34,12 +34,15 @@
           inherit (pkgsUnfree) cudaPackages;
         };
 
+        eitype = pkgs.callPackage ./nix/eitype.nix { };
+
         dictee = pkgs.callPackage ./nix/dictee.nix {
-          inherit parakeet-rs;
+          inherit eitype parakeet-rs;
         };
 
         dictee-cuda = pkgsUnfree.callPackage ./nix/dictee.nix {
           cudaSupport = true;
+          inherit eitype;
           parakeet-rs = parakeet-rs-cuda;
           onnxruntime = onnxruntimeCuda;
         };

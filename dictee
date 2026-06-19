@@ -15,7 +15,7 @@
 #   dictee --setup              # ouvre l'interface de configuration
 #   dictee --setup --wizard     # ouvre l'assistant de configuration
 #
-# Nécessite : transcribe-daemon (en cours), pw-record, dotool
+# Nécessite : transcribe-daemon (en cours), pw-record, eitype
 # Optionnel : animation-speech-ctl (https://github.com/rcspam/animation-speech)
 
 # === CONFIGURATION ===
@@ -104,7 +104,7 @@ case "$AUDIO_SOURCE" in
     *)               _PA_SOURCE="@DEFAULT_SOURCE@"; _IS_APP_SOURCE=true ;;
 esac
 
-# Keyboard layout for dotool: match the compositor's ACTIVE layout+variant.
+# Keyboard layout for eitype: match the compositor's ACTIVE layout+variant.
 # resolve_active_layout (dictee-common.sh) queries KDE (DBus) / GNOME (gsettings)
 # and falls back to the static system config. An explicit DOTOOL_XKB_LAYOUT in
 # dictee.conf wins (sway/Hyprland and other compositors without a queryable API
@@ -201,90 +201,86 @@ else
     SUPPRIME=""
 fi
 
-# dotool needs to write to /dev/uinput, which is restricted to the `input`
-# group. dictee is invoked from many parents whose group-set may differ:
-#  - dictee-ptt.service       → has `sg input -c …` in ExecStart, OK
-#  - tray clic / plasmoid clic → inherit plasmashell's groups, which were
-#    fixed at graphical login: if the user was added to `input` AFTER the
-#    login (postinst, %post, .install hook), plasmashell never picked the
-#    new group up → dotool here fails with "could not open device file".
-#
-# Detect the situation once at startup. When the input group is missing
-# from the running process's group-set, all dotool calls go through
-# `sg input -c`, which re-runs initgroups() against /etc/group and gets
-# the missing group without needing a logout.
-if id -nG 2>/dev/null | grep -qw input; then
-    _DOTOOL_NEEDS_SG=0
-else
-    _DOTOOL_NEEDS_SG=1
-fi
-
-# Safe dotool wrapper for trap ERR
-safe_dotool() {
-    if [[ $_DOTOOL_NEEDS_SG -eq 1 ]]; then
-        sg input -c 'dotool' 2>/dev/null || true
-    else
-        if dotool 2>/dev/null; then true; fi
+# Text output via eitype (libei / XDG RemoteDesktop portal). No uinput daemon.
+_eitype_args() {
+    local -a args=()
+    if [ -n "${DOTOOL_XKB_LAYOUT:-}" ]; then
+        args+=(-l "$DOTOOL_XKB_LAYOUT")
+        if [ -n "${DOTOOL_XKB_VARIANT:-}" ] && [ "$DOTOOL_XKB_VARIANT" != "$DOTOOL_XKB_LAYOUT" ]; then
+            args+=("--variant" "$DOTOOL_XKB_VARIANT")
+        fi
     fi
+    printf '%s\0' "${args[@]}"
 }
 
-# Release all keyboard modifiers — called from trap and before ctrl+* commands
-# to guarantee we never leave a modifier stuck if dotool is interrupted mid-stream.
-# dotool keyup/keydown need the full key names (leftctrl/leftshift/leftalt/leftmeta);
-# the bare ctrl/shift/alt/super are chord-modifier prefixes only and are rejected as
-# keys ("impossible key for layout"), which silently turned this release into a no-op.
+_eitype_run() {
+    command -v eitype >/dev/null 2>&1 || return 1
+    local -a args=()
+    while IFS= read -r -d '' arg; do args+=("$arg"); done < <(_eitype_args)
+    eitype "${args[@]}" "$@"
+}
+
+safe_eitype_key() {
+    _eitype_run -k "$1" 2>/dev/null || true
+}
+
 release_modifiers() {
-    if [[ $_DOTOOL_NEEDS_SG -eq 1 ]]; then
-        printf 'keyup leftctrl\nkeyup leftshift\nkeyup leftalt\nkeyup leftmeta\n' | sg input -c 'dotool' 2>/dev/null || true
-    else
-        printf 'keyup leftctrl\nkeyup leftshift\nkeyup leftalt\nkeyup leftmeta\n' | dotool 2>/dev/null || true
-    fi
+    : # eitype uses per-invocation modifiers via the portal session
 }
 
-# Safe wrapper for modifier-using key commands — releases modifiers before and after
-safe_dotool_key_ctrl() {
-    local combo="$1"  # e.g. "ctrl+V", "ctrl+j"
-    printf 'keyup leftctrl\nkey %s\nkeyup leftctrl\n' "$combo" | safe_dotool
+safe_eitype_key_ctrl() {
+    local key="${1#ctrl+}"
+    key="${key#ctrl+}"
+    key="${key,,}"
+    _eitype_run -M ctrl -k "$key" 2>/dev/null || true
 }
 
-# Type text via dotool, with line break handling and sanitization
-# dotool does not support: U+00A0, U+202F, …, —, –, tab
-# Replace them with ASCII equivalents before sending
+_dispatch_inject_cmd() {
+    case "$1" in
+        "type "*)
+            _eitype_run "${1#type }" 2>/dev/null || true
+            ;;
+        "key enter")
+            safe_eitype_key return
+            ;;
+        "key tab")
+            safe_eitype_key tab
+            ;;
+        "key ctrl+j")
+            _eitype_run -M ctrl -k j 2>/dev/null || true
+            ;;
+        "key backspace")
+            safe_eitype_key backspace
+            ;;
+    esac
+}
+
+# Type text via eitype, with line break handling and sanitization
 type_text() {
     local text="$1"
-    # Sanitize unsupported dotool characters (no subshell to preserve \n)
     text="${text//$'\xc2\xa0'/ }"
     text="${text//$'\xe2\x80\xaf'/ }"
     text="${text//$'\xe2\x80\xa6'/...}"
     text="${text//$'\xe2\x80\x94'/--}"
     text="${text//$'\xe2\x80\x93'/-}"
-    # Strip \x02 markers (end-of-sentence flag, handled by save_last_word)
     text="${text//$'\x02'/}"
-    # Strip all other control chars (\x00-\x08, \x0b-\x0c, \x0e-\x1f, \x7f)
-    # Keep only \x09 (tab), \x0a (newline), \x01 (ctrl+j marker, handled below).
-    # Prevents any hidden escape sequence from reaching dotool and firing keys
-    # outside the ones explicitly enabled.
-    # Sentinel 'X' prevents $() from stripping trailing newlines
     text=$(printf '%sX' "$text" | LC_ALL=C tr -d '\000\003-\010\013\014\016-\037\177')
     text="${text%X}"
-    # Convert to dotool commands: "type ..." + "key enter/tab/ctrl+j" between segments
-    # \x01 marker = ctrl+j (newline without submit, from "contrôle j" voice command)
-    # The continuation indicator (CONTINUATION_INDICATOR) is part of the text
-    # at this point and is typed atomically with the rest.
-    printf '%s\n' "$text" | awk -v RS='\n' '{
+    local cmd
+    while IFS= read -r cmd; do
+        [ -n "$cmd" ] && _dispatch_inject_cmd "$cmd"
+    done < <(printf '%s\n' "$text" | awk -v RS='\n' '{
         if (NR > 1) print "key enter"
-        # Split on \x01 (ctrl+j markers)
         nc = split($0, cjparts, "\x01")
         for (c = 1; c <= nc; c++) {
             if (c > 1) print "key ctrl+j"
-            # Split on tabs
             n = split(cjparts[c], parts, "\t")
             for (i = 1; i <= n; i++) {
                 if (i > 1) print "key tab"
                 if (parts[i] != "") printf "type %s\n", parts[i]
             }
         }
-    }' | safe_dotool
+    }')
 }
 
 # Cross-push continuation: incomplete sentence detection
@@ -437,7 +433,9 @@ apply_continuation() {
             cmd+="key backspace
 "
         done
-        printf '%s' "$cmd" | safe_dotool
+        while IFS= read -r _bs_cmd; do
+            [ -n "$_bs_cmd" ] && _dispatch_inject_cmd "$_bs_cmd"
+        done < <(printf '%s' "$cmd")
     }
 
     # Strip leading spaces (avoid double spaces if previous text
@@ -564,7 +562,9 @@ apply_continuation() {
                 _bs_cmd+="key backspace
 "
             done
-            printf '%s' "$_bs_cmd" | safe_dotool
+            while IFS= read -r _bs_line; do
+                [ -n "$_bs_line" ] && _dispatch_inject_cmd "$_bs_line"
+            done < <(printf '%s' "$_bs_cmd")
         fi
         if $_keepcaps_hit; then
             _ref=" ${_ref}"
@@ -1000,7 +1000,7 @@ check_dependencies() {
     local missing=()
     command -v pw-record >/dev/null || missing+=("pipewire")
     # wl-copy / xclip / xsel is optional (clipboard copy as bonus)
-    command -v dotool >/dev/null || missing+=("dotool")
+    command -v eitype >/dev/null || missing+=("eitype")
     if ! command -v pactl >/dev/null; then
         missing+=("pulseaudio-utils or pipewire-pulse")
     fi
@@ -1648,7 +1648,7 @@ if [ -f "$PIDFILE" ]; then
                 # clipboard save/restore is deferred to 1.4.
                 force_copy_to_clipboard "$translated"
                 sleep 0.1
-                safe_dotool_key_ctrl "ctrl+V"
+                safe_eitype_key_ctrl "ctrl+V"
             else
                 type_text "$translated"
             fi

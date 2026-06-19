@@ -17,7 +17,7 @@
   python3,
 
   # runtime CLI tools the scripts shell out to
-  dotool,
+  eitype,
   sox,
   ffmpeg,
   libnotify,
@@ -47,7 +47,7 @@ let
 
   # Tools placed on every script's PATH.
   runtimeDeps = [
-    dotool
+    eitype
     sox
     ffmpeg
     libnotify
