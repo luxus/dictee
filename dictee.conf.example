@@ -81,6 +81,15 @@ DICTEE_PTT_KEY=67
 # Find your device name with: cat /proc/bus/input/devices
 #DICTEE_PTT_EXTRA_DEVICES="LogiOps Virtual Input,keyd virtual keyboard"
 
+# Grab only these devices (comma-separated substrings). Use when dictee-ptt
+# grabs KVM emulators, mouse side-button HID nodes, or duplicate keyboard
+# interfaces and your real keyboard starts lagging or dropping keys.
+#DICTEE_PTT_ONLY_DEVICES="Neo Ergo Keyboard"
+
+# Extra device name substrings to never grab (merged with built-in deny list:
+# jetkvm, kvm usb emulation, consumer/system control, stream deck, elgato, razer).
+#DICTEE_PTT_DENY_DEVICES=""
+
 # ============================================================================
 # Display and feedback
 # ============================================================================

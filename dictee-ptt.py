@@ -148,9 +148,65 @@ RESCAN_INTERVAL = 10   # secondes entre rescans claviers (hotplug)
 # remapping clavier (logiops, keyd, evsieve, kmonad, etc.) de servir de PTT.
 EXTRA_KEYBOARDS = []
 
+# DICTEE_PTT_ONLY_DEVICES: when set, grab only devices whose name contains
+# one of these substrings (case-insensitive). Empty = grab all passing filters.
+ONLY_KEYBOARDS = []
+
+# DICTEE_PTT_DENY_DEVICES: never grab devices matching these substrings, plus
+# DEFAULT_DENY_PATTERNS (KVM emulators, side-button HID nodes, macro pads, …).
+DENY_KEYBOARDS = []
+DEFAULT_DENY_PATTERNS = (
+    "jetkvm",
+    "kvm usb emulation",
+    "consumer control",
+    "system control",
+    "stream deck",
+    "elgato",
+    "razer",
+)
+
 # Verbose diagnostic logs (e.g. slow keyboard rescan, issue #8). Enabled in
 # main() from DICTEE_DEBUG ("Debug mode" checkbox in dictee-setup / dictee.conf).
 DEBUG = False
+
+
+def _parse_name_list(raw):
+    return [x.strip().lower() for x in raw.split(",") if x.strip()]
+
+
+def _is_denied_name(name_lower):
+    return any(p in name_lower for p in DENY_KEYBOARDS)
+
+
+def _matches_only(name_lower):
+    if not ONLY_KEYBOARDS:
+        return True
+    return any(p in name_lower for p in ONLY_KEYBOARDS)
+
+
+def _name_allowed(name_lower):
+    if _is_denied_name(name_lower):
+        return False
+    if not _matches_only(name_lower):
+        return False
+    return (
+        any(x in name_lower for x in EXTRA_KEYBOARDS)
+        or not any(x in name_lower for x in ("virtual", "uinput", "dotool", "dictee-ptt"))
+    )
+
+
+def _filter_prefer_keyboard_named(entries):
+    """Drop duplicate HID kbd nodes when a sibling has 'keyboard' in its name."""
+    if ONLY_KEYBOARDS or not entries:
+        return entries
+    if any("keyboard" in name for name, _ in entries):
+        return [
+            entry
+            for entry in entries
+            if "keyboard" in entry[0]
+            or any(x in entry[0] for x in EXTRA_KEYBOARDS)
+        ]
+    return entries
 
 
 def load_config():
@@ -168,7 +224,7 @@ def load_config():
 
 def find_keyboards_evdev():
     """Trouve les claviers physiques via evdev."""
-    devs = []
+    candidates = []
     for path in evdev.list_devices():
         try:
             dev = InputDevice(path)
@@ -184,15 +240,14 @@ def find_keyboards_evdev():
         if (EV_KEY in caps and len(caps.get(EV_KEY, [])) > 30
                 and EV_REL not in caps and EV_ABS not in caps):
             name = dev.name.lower()
-            if any(x in name for x in EXTRA_KEYBOARDS):
-                devs.append(dev)
-            elif not any(x in name for x in ("virtual", "uinput", "dotool", "dictee-ptt")):
-                devs.append(dev)
+            if _name_allowed(name):
+                candidates.append((name, dev))
             else:
                 dev.close()
         else:
             dev.close()
-    return devs
+    filtered = _filter_prefer_keyboard_named(candidates)
+    return [dev for _, dev in filtered]
 
 
 def find_keyboards_raw():
@@ -227,14 +282,14 @@ def find_keyboards_raw():
             has_pointer = bool(ev_caps & (1 << EV_REL)) or bool(ev_caps & (1 << EV_ABS))
         # Require the kbd handler but reject pointer devices.
         if "kbd" in handlers_line and "mouse" not in handlers_line and not has_pointer:
-            name_lower = name_line.lower()
-            allowed = any(x in name_lower for x in EXTRA_KEYBOARDS) or \
-                not re.search(r"virtual|uinput|dotool|dictee-ptt", name_line, re.IGNORECASE)
-            if allowed:
+            m_name = re.search(r'N: Name="([^"]*)"', block)
+            name_lower = (m_name.group(1) if m_name else name_line).lower()
+            if _name_allowed(name_lower):
                 m = re.search(r"event\d+", handlers_line)
                 if m:
-                    devs.append(f"/dev/input/{m.group()}")
-    return devs
+                    devs.append((name_lower, f"/dev/input/{m.group()}"))
+    filtered = _filter_prefer_keyboard_named(devs)
+    return [path for _, path in filtered]
 
 
 def find_dictee_bin():
@@ -889,7 +944,7 @@ def run_raw(ptt):
 # ─── Main ───────────────────────────────────────────────────────────
 
 def main():
-    global DICTEE_BIN, EXTRA_KEYBOARDS, DEBUG
+    global DICTEE_BIN, EXTRA_KEYBOARDS, ONLY_KEYBOARDS, DENY_KEYBOARDS, DEBUG
 
     mode = "toggle"
     key_dictee = 67   # F9
@@ -901,9 +956,18 @@ def main():
     DEBUG = conf.get("DICTEE_DEBUG", "false") == "true"
 
     extra_raw = conf.get("DICTEE_PTT_EXTRA_DEVICES", "")
-    EXTRA_KEYBOARDS = [x.strip().lower() for x in extra_raw.split(",") if x.strip()]
+    EXTRA_KEYBOARDS = _parse_name_list(extra_raw)
     if EXTRA_KEYBOARDS:
         print(f"[ptt] extra keyboards whitelist: {EXTRA_KEYBOARDS}")
+
+    ONLY_KEYBOARDS = _parse_name_list(conf.get("DICTEE_PTT_ONLY_DEVICES", ""))
+    if ONLY_KEYBOARDS:
+        print(f"[ptt] only keyboards: {ONLY_KEYBOARDS}")
+
+    deny_raw = conf.get("DICTEE_PTT_DENY_DEVICES", "")
+    DENY_KEYBOARDS = list(DEFAULT_DENY_PATTERNS) + _parse_name_list(deny_raw)
+    if deny_raw.strip():
+        print(f"[ptt] extra deny patterns: {_parse_name_list(deny_raw)}")
 
     mode = conf.get("DICTEE_PTT_MODE", mode)
 
