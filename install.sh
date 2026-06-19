@@ -114,6 +114,12 @@ launch_wizard() {
     esac
 
     info "Launching dictee-setup..."
+    # Launch from a directory that still exists after this installer exits.
+    # We currently sit in the temp dir that the EXIT trap removes moments later;
+    # a child inheriting that deleted CWD makes "python -m pip" fail with
+    # FileNotFoundError on os.getcwd() when the user later installs Vosk/Whisper
+    # from the setup window (observed on Fedora 44 KDE, issue #18).
+    cd / 2>/dev/null || true
     if [[ -n "$sudo_env" ]]; then
         nohup $sudo_env dictee-setup >/dev/null 2>&1 &
     else
@@ -568,13 +574,21 @@ mode_online() {
             fi
         fi
 
-        info "Cloning the dictee repository (master)..."
-        # Always clone master for Arch: PKGBUILD packaging fixes (orphan
-        # cleanup, dependency tweaks, .install hooks) must ship without a
-        # full version bump. The actual binary version is pinned in
-        # Cargo.toml on master, which makepkg picks up automatically.
-        # Other distros use the .deb / .rpm assets from the release tag.
-        git clone --depth 1 "https://github.com/${REPO}.git" dictee-src
+        info "Cloning dictee at the latest release tag (${RELEASE_TAG})..."
+        # Clone the resolved release TAG ($RELEASE_TAG), NOT master. This
+        # mirrors what the deb/rpm/tarball paths already do — they pull assets
+        # from the release tag — so all four targets follow the same published
+        # release. The Arch path builds from source, so it clones the tag to
+        # read its PKGBUILD; makepkg then builds it via source=()
+        # (archive/v$_tag.tar.gz). Cloning the tag guarantees that archive
+        # exists: a published tag always has a downloadable archive, and the
+        # tag's PKGBUILD pins _tag to that same version. master must NOT be
+        # cloned — it can sit ahead on an unreleased dev version (e.g.
+        # 1.4.0-beta) whose tag does not exist yet, making makepkg fetch a 404
+        # archive and abort (issue #17). Tracking $RELEASE_TAG also means Arch
+        # follows the latest published release automatically, nothing
+        # hard-coded. $RELEASE_TAG is set above (latest stable, or --version).
+        git clone --depth 1 --branch "$RELEASE_TAG" "https://github.com/${REPO}.git" dictee-src
         cd dictee-src
 
         # Pre-build heads-up: makepkg compiles parakeet-rs (Rust+ONNX) from

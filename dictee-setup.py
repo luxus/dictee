@@ -1635,9 +1635,14 @@ class VenvInstallThread(QThread):
         try:
             self.progress.emit(_("Creating virtual environment…"))
             os.makedirs(self.venv_path, exist_ok=True)
+            # Run every child from the venv dir (just created, always exists).
+            # The GUI's own CWD may be gone — e.g. launched by install.sh from a
+            # temp dir the installer removes right after — which makes pip's
+            # os.getcwd() raise FileNotFoundError (issue #18, Fedora 44 KDE).
             result = subprocess.run(
                 ["python3", "-m", "venv", self.venv_path],
                 capture_output=True, text=True, timeout=60,
+                cwd=self.venv_path,
             )
             if result.returncode != 0:
                 self.done.emit(False, result.stderr.strip())
@@ -1656,6 +1661,7 @@ class VenvInstallThread(QThread):
             r_pip = subprocess.run(
                 pip_cmd + ["install", "--upgrade", "pip"],
                 capture_output=True, text=True, timeout=300,
+                cwd=self.venv_path,
             )
             if r_pip.returncode != 0:
                 self.done.emit(False,
@@ -1666,6 +1672,7 @@ class VenvInstallThread(QThread):
             result = subprocess.run(
                 pip_cmd + ["install", "--upgrade", self.pip_package],
                 capture_output=True, text=True, timeout=600,
+                cwd=self.venv_path,
             )
             if result.returncode != 0:
                 self.done.emit(False, result.stderr.strip()[-500:])
@@ -3033,17 +3040,30 @@ class TestTranslateThread(QThread):
         if not self._wizard_env:
             return None
         backend = self._wizard_env.get("DICTEE_ASR_BACKEND", "parakeet")
-        if backend not in ("parakeet", "canary"):
+        # Map each backend to its daemon binary. Parakeet/Canary share the Rust
+        # transcribe-daemon (--socket arg); Vosk/Whisper are separate Python
+        # daemons that bind $DICTEE_TRANSCRIBE_SOCKET (set in env below).
+        daemon_bin = {
+            "parakeet": "transcribe-daemon",
+            "canary": "transcribe-daemon",
+            "vosk": "transcribe-daemon-vosk",
+            "whisper": "transcribe-daemon-whisper",
+        }.get(backend)
+        if not daemon_bin:
             return None
         sock = os.path.join(
             tempfile.gettempdir(),
             f"dictee-test-{os.getpid()}-{id(self)}.sock")
         env = {**os.environ, **self._wizard_env, "DICTEE_TRANSCRIBE_SOCKET": sock}
-        cmd = ["transcribe-daemon", "--socket", sock]
-        if self._model_dir:
-            cmd.append(self._model_dir)
-        if backend == "canary":
-            cmd.append("--canary")
+        if backend in ("parakeet", "canary"):
+            cmd = [daemon_bin, "--socket", sock]
+            if self._model_dir:
+                cmd.append(self._model_dir)
+            if backend == "canary":
+                cmd.append("--canary")
+        else:
+            # Vosk/Whisper read the socket path from the env above.
+            cmd = [daemon_bin]
         try:
             self._daemon_proc = subprocess.Popen(
                 cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -3339,19 +3359,30 @@ class TestDicteeThread(QThread):
         if not self._wizard_env:
             return None
         backend = self._wizard_env.get("DICTEE_ASR_BACKEND", "parakeet")
-        # Only Parakeet/Canary use transcribe-daemon. Vosk/Whisper have their
-        # own daemons (transcribe-daemon-vosk/whisper) — out of scope here.
-        if backend not in ("parakeet", "canary"):
+        # Map each backend to its daemon binary. Parakeet/Canary share the Rust
+        # transcribe-daemon (--socket arg); Vosk/Whisper are separate Python
+        # daemons that bind $DICTEE_TRANSCRIBE_SOCKET (set in env below).
+        daemon_bin = {
+            "parakeet": "transcribe-daemon",
+            "canary": "transcribe-daemon",
+            "vosk": "transcribe-daemon-vosk",
+            "whisper": "transcribe-daemon-whisper",
+        }.get(backend)
+        if not daemon_bin:
             return None
         sock = os.path.join(
             tempfile.gettempdir(),
             f"dictee-test-{os.getpid()}-{id(self)}.sock")
         env = {**os.environ, **self._wizard_env, "DICTEE_TRANSCRIBE_SOCKET": sock}
-        cmd = ["transcribe-daemon", "--socket", sock]
-        if self._model_dir:
-            cmd.append(self._model_dir)
-        if backend == "canary":
-            cmd.append("--canary")
+        if backend in ("parakeet", "canary"):
+            cmd = [daemon_bin, "--socket", sock]
+            if self._model_dir:
+                cmd.append(self._model_dir)
+            if backend == "canary":
+                cmd.append("--canary")
+        else:
+            # Vosk/Whisper read the socket path from the env above.
+            cmd = [daemon_bin]
         try:
             self._daemon_proc = subprocess.Popen(
                 cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
